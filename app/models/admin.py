@@ -1,26 +1,23 @@
 # app/models/user.py
-from pydantic import BaseModel, Field
+from typing import Annotated, Optional
+from pydantic import BaseModel, BeforeValidator, Field
 from bson import ObjectId
 
-# custom Pydantic type
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-    
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
+PyObjectId = Annotated[str, BeforeValidator(str)]
 # Admin user model
 class AdminUser(BaseModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    username: str
+    """Admin user model"""
 
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    username: str
+    
     class Config:    
         allow_population_by_field_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
+        schema_extra = {
+            "example": {
+                "username": "admin",
+            }
+        }
 

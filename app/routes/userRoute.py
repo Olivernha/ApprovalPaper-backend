@@ -16,6 +16,9 @@ router = APIRouter(
 
 @router.get("/", response_model=List[User])
 async def get_users():
-    """Get all users with pagination"""
     return await UserController.get_all_users()
 
+
+@router.post("/",status_code=status.HTTP_201_CREATED, response_model=User)
+async def create_user(user: User):
+    return await UserController.create_user(user)
