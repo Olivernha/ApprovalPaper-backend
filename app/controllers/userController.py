@@ -19,7 +19,6 @@ class UserController:
             service = AdminService(collection_name=collection_name)
             user_data = user.model_dump()
             created_user = await service.create_user(user_data)
-            print(f"Created user: {created_user}")
             return created_user
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

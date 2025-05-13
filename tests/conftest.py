@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 import os
 import uuid
 
-# Load test environment variables from .env.test
+
+# Load test environment variables from .env
+load_dotenv()
 def pytest_configure():
-    load_dotenv(dotenv_path=".env.test")
+   
     os.environ["MONGODB_URL"] = os.getenv("TEST_MONGODB_URL")
     os.environ["DATABASE_NAME"] = os.getenv("TEST_DATABASE_NAME")
 
