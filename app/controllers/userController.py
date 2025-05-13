@@ -8,7 +8,7 @@ class UserController:
     @staticmethod
     async def get_all_users() -> List[AdminUser]:
         try:
-            users = await UserService.get_collection().find().to_list(length=100)
+            users = await AdminService.get_collection().find().to_list(length=100)
             return users
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
