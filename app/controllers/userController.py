@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import HTTPException, status
 
-from app.services.userService import UserService
+from app.services.adminService import UserService
 from ..models.admin import AdminUser
 
 class UserController:
