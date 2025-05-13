@@ -1,8 +1,8 @@
 from typing import List
 from fastapi import HTTPException, status
 
-from app.services.adminService import AdminService
-from ..models.admin import AdminUser
+from app.services import AdminService
+from ..models import AdminUser
 
 class UserController:
     @staticmethod

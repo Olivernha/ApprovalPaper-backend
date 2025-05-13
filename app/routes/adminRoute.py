@@ -2,8 +2,8 @@
 from fastapi import APIRouter, Depends, status, Query
 from typing import List
 
-from ..models.admin import AdminUser
-from ..controllers.userController import UserController
+from ..models import AdminUser
+from ..controllers import UserController
 from ..config import settings
 
 router = APIRouter(

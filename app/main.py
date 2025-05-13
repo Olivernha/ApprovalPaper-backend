@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.database.DBconnection import MongoDB
+from app.database import MongoDB
 
 async def lifespan(app: FastAPI):
     """Lifespan event for the application"""

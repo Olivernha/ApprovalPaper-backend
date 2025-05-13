@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
-from ..database.DBconnection import MongoDB
-from ..models.admin import AdminUser 
+from ..database import MongoDB
+from ..models import AdminUser 
 class AdminService:
     collection_name = "users"
     
