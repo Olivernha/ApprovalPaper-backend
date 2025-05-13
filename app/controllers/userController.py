@@ -1,32 +1,34 @@
 from typing import List
 from fastapi import HTTPException, status
-
 from app.services import AdminService
 from ..models import AdminUser
 
 class UserController:
     @staticmethod
-    async def get_all_users() -> List[AdminUser]:
+    async def get_all_users(collection_name: str = "users") -> List[AdminUser]:
         try:
-            users = await AdminService.get_collection().find().to_list(length=100)
+            service = AdminService(collection_name=collection_name)
+            users = await service.get_collection().find().to_list(length=100)
             return users
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
     @staticmethod
-    async def create_user(user: AdminUser) -> AdminUser:
+    async def create_user(user: AdminUser, collection_name: str = "users") -> AdminUser:
         try:
+            service = AdminService(collection_name=collection_name)
             user_data = user.model_dump()
-            created_user = await AdminService.create_user(user_data)
+            created_user = await service.create_user(user_data)
             print(f"Created user: {created_user}")
             return created_user
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
-    async def get_user_by_username(username: str) -> AdminUser:
+    async def get_user_by_username(username: str, collection_name: str = "users") -> AdminUser:
         try:
-            user = await AdminService.get_user_by_username(username)
+            service = AdminService(collection_name=collection_name)
+            user = await service.get_user_by_username(username)
             if not user:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
             return user
