@@ -12,7 +12,5 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {"message": "Welcome to the Approval Paper API!"}
+from app.routes import userRoute
+app.include_router(userRoute.router)
