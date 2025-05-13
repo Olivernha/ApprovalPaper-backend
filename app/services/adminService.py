@@ -24,4 +24,4 @@ class AdminService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
         
         result = await AdminService.get_collection().insert_one(user)
-        return {"_id": str(result.inserted_id), **user}
+        return AdminUser(_id=str(result.inserted_id), **user)
