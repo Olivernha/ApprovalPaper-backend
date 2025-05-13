@@ -1,2 +1,6 @@
-fastapi[standard]==0.113.0
-pydantic==2.8.0
+fastapi[standard]==0.115.12
+pydantic==2.11.4
+uvicorn==0.34.2
+pymongo==4.12.1
+python_dotenv==1.1.0
+motor==3.7.0
