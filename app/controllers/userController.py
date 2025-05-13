@@ -1,9 +1,10 @@
 # app/controllers/user_controller.py
-from typing import List, Optional
+from typing import List
 from fastapi import HTTPException, status
 
+from app.services.userService import UserService
+
 from ..models.admin import AdminUser
-# from ..services.user_service import UserService
 
 
 class UserController:
@@ -11,12 +12,7 @@ class UserController:
     async def get_all_users() -> List[AdminUser]:
         """Get all users"""
         try:
-            # give dummy data for now
-            users = [
-                AdminUser(username="admin1"),
-                AdminUser(username="admin2"),
-                AdminUser(username="admin3"),
-            ]
+            users = await UserService.get_collection().find().to_list(length=None)
             return users
           
         except Exception as e:
