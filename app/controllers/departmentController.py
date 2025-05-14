@@ -6,7 +6,7 @@ from app.services import DepartmentService
 
 class DepartmentController:
     @staticmethod
-    async def create_department(department : DepartmentCreate , collection_name: str = "users") -> Department:
+    async def create_department(department : DepartmentCreate , collection_name: str = "departments") -> Department:
         try:
             service = DepartmentService(collection_name=collection_name)
             created_department = await service.create_department(department)

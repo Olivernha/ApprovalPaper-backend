@@ -1,5 +1,7 @@
 from app.database import MongoDB
-from app.schema import DepartmentCreate
+from app.schema import DepartmentCreate,DepartmentInDB , DepartmentResponse
+
+
 
 class DepartmentService:
     def __init__(self, collection_name: str = "departments"):
@@ -12,11 +14,10 @@ class DepartmentService:
     async def create_department(self, department_data : DepartmentCreate):
         """Create a new department in the database."""
         # Check if the department already exists
-
         existing_department = await self.get_collection().find_one({"name": department_data.name})
-        if existing_department:
-            return {"message": "Department already exists", "data": existing_department}
         
-        # Insert the new department into the database
+        if existing_department:
+            return {"message": "Department already exists" , "data": DepartmentResponse(**existing_department)}
+        
         await self.get_collection().insert_one(department_data.model_dump())
         return {"message": "Department created successfully", "data": department_data}

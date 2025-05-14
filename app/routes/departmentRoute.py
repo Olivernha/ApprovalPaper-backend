@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.controllers import DepartmentController
-from app.schema import Department, DepartmentCreate
+from app.schema import  DepartmentCreate
 
 router = APIRouter(
     prefix="/department", 
