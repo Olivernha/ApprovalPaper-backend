@@ -1,7 +1,7 @@
-from typing import Annotated, Optional
+from typing import  Optional
 from pydantic import BaseModel, Field, BeforeValidator
 from bson import ObjectId
-from schema import PyObjectId
+from .base import PyObjectId
 
 class AdminUser(BaseModel):
     """Admin user model"""

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.schema.documentType import DocumentType
 from app.controllers import DocumentTypeController
+from app.schema import DocumentTypeCreate
 
 router= APIRouter(
     prefix="/documentType",
@@ -9,5 +9,5 @@ router= APIRouter(
 )
 
 @router.post("/create", status_code=201)
-async def create_documentType(document_type: DocumentType):
+async def create_documentType(document_type: DocumentTypeCreate):
     return await DocumentTypeController.create_document_type(document_type)

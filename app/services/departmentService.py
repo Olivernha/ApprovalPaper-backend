@@ -1,8 +1,6 @@
 from app.database import MongoDB
 from app.schema import DepartmentCreate,DepartmentInDB , DepartmentResponse
 
-
-
 class DepartmentService:
     def __init__(self, collection_name: str = "departments"):
         self.collection_name = collection_name
