@@ -12,6 +12,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-from app.routes import adminRoute, documentTypeRoute
+from app.routes import adminRoute, documentTypeRoute , departmentRoute
 app.include_router(adminRoute.router)
 app.include_router(documentTypeRoute.router)
+app.include_router(departmentRoute.router)
+
+

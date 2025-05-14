@@ -1,2 +1,3 @@
 from .userController import UserController
 from .docuementTypeController import DocumentTypeController
+from .departmentController import DepartmentController
