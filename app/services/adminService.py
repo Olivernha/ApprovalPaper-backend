@@ -1,6 +1,7 @@
 from fastapi import HTTPException, status
 from ..database import MongoDB
-from ..models import AdminUser 
+from ..schema import AdminUser
+
 
 class AdminService:
     def __init__(self, collection_name: str = "users"):

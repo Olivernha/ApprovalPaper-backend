@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 from typing import List
-from ..models import AdminUser
+from ..schema import AdminUser
 from ..controllers import UserController
 from ..config import settings
 
