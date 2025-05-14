@@ -1,1 +1,2 @@
 from .userController import UserController
+from .docuementTypeController import DocumentTypeController
