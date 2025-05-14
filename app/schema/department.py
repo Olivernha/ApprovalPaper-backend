@@ -2,7 +2,7 @@ from bson import ObjectId
 from pydantic import BaseModel, Field, root_validator
 from typing import Any, Optional
 
-from app.util.customObjectId import PyObjectId
+from schema import PyObjectId
 
 class Department(BaseModel):
     """Shared base class, useful for inheritance across department models."""

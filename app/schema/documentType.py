@@ -2,8 +2,8 @@ from typing import Annotated, Optional
 from pydantic import BaseModel, Field, BeforeValidator
 from bson import ObjectId
 
-# Annotated ObjectId type
-PyObjectId = Annotated[str, BeforeValidator(str)]
+from schema import PyObjectId
+
 class DocumentType(BaseModel):
     """Document Type model for categorizing documents"""
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
