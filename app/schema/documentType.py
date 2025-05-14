@@ -1,0 +1,23 @@
+from typing import Annotated, Optional
+from pydantic import BaseModel, Field, BeforeValidator
+from bson import ObjectId
+
+PyObjectId = Annotated[str, BeforeValidator(str)]
+
+class DocumentType(BaseModel):
+    """Document Type model for categorizing documents"""
+    id: Optional[PyObjectId] = Field(alias="_id", default=None)
+    name: str = Field(..., min_length=1, description="Unique document type name (e.g., Tender Committee)")
+    prefix: str = Field(..., min_length=1, description="Unique prefix for reference number (e.g., TPG)")
+    
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        schema_extra = {
+            "example": {
+                "_id": "507f1f77bcf86cd799439011",
+                "name": "Tender Committee",
+                "prefix": "TPG"
+            }
+        }
