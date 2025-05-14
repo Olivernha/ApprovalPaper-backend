@@ -1,7 +1,10 @@
+from typing import List
 from fastapi import HTTPException, status
 from bson import ObjectId
+
+
 from ..database import MongoDB
-from ..schema import DocumentTypeCreate, DocumentTypeInDB
+from ..schema import DocumentTypeCreate, DocumentTypeInDB , DocumentTypeWithDepartment
 from ..models import DocumentTypeModel
 
 class DocumentTypeService:
@@ -10,6 +13,16 @@ class DocumentTypeService:
     
     def get_collection(self):
         return MongoDB.get_database()[self.collection_name]
+    
+    async def get_document_types(self) -> List[DocumentTypeInDB]:
+        """Retrieve all document types from the database"""
+        try:
+            results = self.get_collection().find()
+            documents = await results.to_list(length=100)
+            return [await DocumentTypeModel.to_document_type(doc) for doc in documents]
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        
     
     async def create_document_type(self, doc_type: DocumentTypeCreate) -> DocumentTypeInDB:
         """Create a new document type"""
@@ -28,6 +41,31 @@ class DocumentTypeService:
         result = await self.get_collection().insert_one(doc_type_data)
         return await DocumentTypeModel.to_document_type({"_id": result.inserted_id, **doc_type_data})
     
+    async def get_document_types_with_department(self) -> List[DocumentTypeWithDepartment]:
+            """Retrieve all document types with their department details"""
+            try:
+                pipeline = [
+                    {
+                        "$lookup": {
+                            "from": "departments",
+                            "localField": "department_id",
+                            "foreignField": "_id",
+                            "as": "department"
+                        }
+                    },
+                    {
+                        "$match": {
+                            "department": {"$ne": []}  # Exclude document types with no matching department
+                        }
+                    }
+                ]
+                results = self.get_collection().aggregate(pipeline)
+                documents = await results.to_list(length=100)
+                return [await DocumentTypeModel.to_document_type_with_department(doc) for doc in documents]
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        
+
     @staticmethod
     async def ensure_indexes():
         """Ensure indexes for the document_types collection"""

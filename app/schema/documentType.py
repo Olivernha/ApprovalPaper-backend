@@ -4,8 +4,9 @@ from .base import PyObjectId
 from .department import DepartmentInDB
 
 class DocumentType(BaseModel):
-       class Config:
-
+    """Shared base class, useful for inheritance across document type models."""
+    class Config:
+        """Configuration for shared behavior across models."""
         populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {PyObjectId: str}
@@ -18,22 +19,24 @@ class DocumentType(BaseModel):
         }
 
 class DocumentTypeCreate(DocumentType):
-   
+    """DocumentType model used when creating a new document type (POST request)."""
     name: str = Field(..., min_length=1, description="Unique document type name (e.g., Tender Committee)")
     prefix: str = Field(..., min_length=1, description="Unique prefix for reference number (e.g., TPG)")
     department_id: PyObjectId = Field(..., description="Reference to Department")
 
 class DocumentTypeInDB(DocumentType):
-  
+    """DocumentType model for MongoDB interaction (includes _id)."""
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     name: str = Field(..., min_length=1, description="Unique document type name (e.g., Tender Committee)")
     prefix: str = Field(..., min_length=1, description="Unique prefix for reference number (e.g., TPG)")
     department_id: PyObjectId = Field(..., description="Reference to Department")
 
 class DocumentTypeResponse(DocumentTypeInDB):
+    """DocumentType model for API responses."""
     pass
 
 class DocumentTypeWithDepartment(DocumentTypeInDB):
+    """DocumentType model including Department details."""
     department: DepartmentInDB = Field(..., description="Associated Department details")
     
     class Config:
