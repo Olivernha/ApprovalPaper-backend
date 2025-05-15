@@ -25,8 +25,8 @@ class DocumentType(BaseModel):
 
 class DocumentTypeCreate(DocumentType):
     """Schema for creating a document type"""
-    department_id: PyObjectId = Field(..., description="Department ID this document type belongs to")
-    
+    department_id: PyObjectId = Field(...,  description="Department ID this document type belongs to")
+
 
 class DocumentTypeInDB(DocumentType):
     """Schema for document type from the database"""
