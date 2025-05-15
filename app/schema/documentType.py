@@ -1,12 +1,17 @@
-from typing import Optional
+from typing import List, Optional
+from bson import ObjectId
 from pydantic import BaseModel, Field
-from .base import PyObjectId
+
 from .department import DepartmentInDB
 
+from .base import PyObjectId
+
 class DocumentType(BaseModel):
-    """Shared base class, useful for inheritance across document type models."""
+    """Base model for document type"""
+    name: str = Field(..., description="Name of the document type")
+    prefix: str = Field(..., description="Prefix for document numbering")
+
     class Config:
-        """Configuration for shared behavior across models."""
         populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {PyObjectId: str}
@@ -19,36 +24,35 @@ class DocumentType(BaseModel):
         }
 
 class DocumentTypeCreate(DocumentType):
-    """DocumentType model used when creating a new document type (POST request)."""
-    name: str = Field(..., min_length=1, description="Unique document type name (e.g., Tender Committee)")
-    prefix: str = Field(..., min_length=1, description="Unique prefix for reference number (e.g., TPG)")
-    department_id: PyObjectId = Field(..., description="Reference to Department")
+    """Schema for creating a document type"""
+    department_id: PyObjectId = Field(..., description="Department ID this document type belongs to")
+    
 
 class DocumentTypeInDB(DocumentType):
-    """DocumentType model for MongoDB interaction (includes _id)."""
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    name: str = Field(..., min_length=1, description="Unique document type name (e.g., Tender Committee)")
-    prefix: str = Field(..., min_length=1, description="Unique prefix for reference number (e.g., TPG)")
-    department_id: PyObjectId = Field(..., description="Reference to Department")
+    """Schema for document type from the database"""
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    department_id: PyObjectId = Field(..., description="Department ID this document type belongs to")
 
-class DocumentTypeResponse(DocumentTypeInDB):
-    """DocumentType model for API responses."""
-    pass
-
-class DocumentTypeWithDepartment(DocumentTypeInDB):
-    """DocumentType model including Department details."""
-    department: DepartmentInDB = Field(..., description="Associated Department details")
-    
     class Config:
+        populate_by_name = True
         json_schema_extra = {
             "example": {
-                "_id": "507f1f77bcf86cd799439011",
-                "name": "Tender Committee",
-                "prefix": "TPG",
-                "department_id": "507f1f77bcf86cd799439013",
-                "department": {
-                    "_id": "507f1f77bcf86cd799439013",
-                    "name": "Finance"
-                }
+                "_id": "60d5f484f1a2c8b8e4f3c8b9",
+                "name": "Invoice",
+                "prefix": "INV",
+                "department_id": "60d5f484f1a2c8b8e4f3c8b8"
             }
         }
+
+
+class DocumentTypeWithDepartment(DocumentTypeInDB):
+    """Schema for document type with department details"""
+    department: DepartmentInDB
+
+    class Config:
+        populate_by_name = True
+
+
+class DocumentTypeResponse(DocumentTypeInDB):
+    """Response schema for document type"""
+    pass

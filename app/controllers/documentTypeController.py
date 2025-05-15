@@ -1,9 +1,8 @@
 from typing import List
 from fastapi import HTTPException, status
-
-from app.models import DocumentTypeModel
+from ..models import DocumentTypeModel
 from ..services import DocumentTypeService
-from ..schema import DocumentTypeCreate, DocumentTypeInDB , DocumentTypeWithDepartment
+from ..schema import DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
 
 class DocumentTypeController:
     @staticmethod
@@ -17,9 +16,8 @@ class DocumentTypeController:
     
     @staticmethod
     async def get_document_types(collection_name: str = DocumentTypeModel.COLLECTION_NAME) -> List[DocumentTypeInDB]:
-        try: 
+        try:
             service = DocumentTypeService(collection_name=collection_name)
-            
             return await service.get_document_types()
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -29,5 +27,13 @@ class DocumentTypeController:
         try:
             service = DocumentTypeService(collection_name=collection_name)
             return await service.get_document_types_with_department()
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+    @staticmethod
+    async def get_document_types_by_department_id(department_id: str, collection_name: str = DocumentTypeModel.COLLECTION_NAME) -> List[DocumentTypeInDB]:
+        try:
+            service = DocumentTypeService(collection_name=collection_name)
+            return await service.get_document_types_by_department_id(department_id)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

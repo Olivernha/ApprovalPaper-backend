@@ -1,23 +1,34 @@
 from typing import List
-from fastapi import APIRouter
+from fastapi import APIRouter, Path, status
+from ..controllers import DocumentTypeController
+from ..schema import DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
+from ..config import settings
 
-from app.controllers import DocumentTypeController
-from app.schema import DocumentTypeCreate , DocumentTypeWithDepartment
-
-router= APIRouter(
-    prefix="/documentType",
-    tags=["documentType"],
+router = APIRouter(
+    prefix=f"{settings.API_V1_PREFIX}/document-type",
+    tags=["document-type"],
+    responses={404: {"description": "Not found"}},
 )
 
-@router.post("/create", status_code=201)
-async def create_documentType(document_type: DocumentTypeCreate):
+@router.post("/create", status_code=status.HTTP_201_CREATED, response_model=DocumentTypeInDB)
+async def create_document_type(document_type: DocumentTypeCreate):
     return await DocumentTypeController.create_document_type(document_type)
 
-
-@router.get("/", status_code=200)
-async def get_documentType():
+@router.get("/", response_model=List[DocumentTypeInDB])
+async def get_document_types():
     return await DocumentTypeController.get_document_types()
 
 @router.get("/with-department", response_model=List[DocumentTypeWithDepartment])
 async def get_document_types_with_department():
-    return await DocumentTypeController.get_document_types_with_department(collection_name="document_types")
+    return await DocumentTypeController.get_document_types_with_department()
+
+@router.get("/by-department/{department_id}", response_model=List[DocumentTypeInDB])
+async def get_document_types_by_department_id(
+    department_id: str = Path(
+        ...,
+        title="Department ID",
+        description="The ObjectId of the department",
+        example="60d5f484f1a2c8b8e4f3c8b8"
+    )
+):
+    return await DocumentTypeController.get_document_types_by_department_id(department_id)
