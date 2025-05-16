@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from app.database import MongoDB
 from app.services import DocumentTypeService
-
+from app.routes import adminRoute, documentRoute, documentTypeRoute , departmentRoute
 async def lifespan(app: FastAPI):
     """Lifespan event for the application"""
     print("Connecting to MongoDB...")
@@ -15,9 +15,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-from app.routes import adminRoute, documentTypeRoute , departmentRoute
 app.include_router(adminRoute.router)
 app.include_router(documentTypeRoute.router)
 app.include_router(departmentRoute.router)
+app.include_router(documentRoute.router)
 
 
