@@ -48,3 +48,8 @@ class DepartmentInDB(Department):
 
 class DocumentTypeWithDepartment(DocumentTypeInDB):
     department : DepartmentBase = Field(..., description="Department details")
+
+
+class DepartmentResponse(DepartmentInDB):
+    """Schema for department response"""
+    pass

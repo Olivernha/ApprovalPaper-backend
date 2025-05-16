@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 
 from app.controllers import DocumentController
-from ..schema.document import DocumentCreate
+from ..schema.document import DocumentCreate, DocumentResponse
 # from ..services import  DocumentService
 
 router = APIRouter(
@@ -11,7 +11,7 @@ router = APIRouter(
 )
 
 
-@router.get("/")
+@router.get("/", response_model=List[DocumentResponse])
 async def get_documents():
     try:
         return await DocumentController.get_documents()
@@ -19,7 +19,7 @@ async def get_documents():
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED , response_model=DocumentResponse)
 async def create_document(document: DocumentCreate):
     try:
         print("Creating document with data:", document)
