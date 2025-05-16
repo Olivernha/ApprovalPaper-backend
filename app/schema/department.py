@@ -1,31 +1,50 @@
-from bson import ObjectId
-from pydantic import BaseModel, Field, root_validator
-from typing import Any, Optional
+from typing import List, Optional
+from pydantic import BaseModel, Field
 
+from . import DocumentTypeCreate, DocumentTypeInDB
 from .base import PyObjectId
-
 class Department(BaseModel):
-    """Shared base class, useful for inheritance across department models."""
+    """Base department model"""
+    name: str = Field(..., min_length=1, description="Unique department name")
+
     class Config:
-        """Configuration for shared behavior across models."""
         populate_by_name = True
         arbitrary_types_allowed = True
-        json_encoders = {PyObjectId: str}  # Convert PyObjectId to string
+        json_encoders = {PyObjectId: str}
         json_schema_extra = {
             "example": {
                 "name": "Finance"
             }
         }
-
+class DepartmentBase(Department):
+    id : PyObjectId = Field(default_factory=PyObjectId, alias="_id")
 class DepartmentCreate(Department):
-    """Department model used when creating a new department (POST request)."""
-    name: str = Field(..., min_length=1, description="Unique department name (e.g., Finance)")
+    """Schema for creating a department"""
+    document_types: List[DocumentTypeCreate] = Field(default_factory=list, description="List of document types")
 
+    class Config(Department.Config):
+        json_schema_extra = {
+            "example": {
+                "name": "Finance",
+                "document_types": [
+                    {
+                        "name": "Invoice",
+                        "prefix": "INV"
+                    },
+                    {
+                        "name": "Receipt",
+                        "prefix": "REC"
+                    }
+                ]
+            }
+        }
 
 class DepartmentInDB(Department):
-    """Department model for MongoDB interaction (includes _id)."""
-    id: Optional[PyObjectId] = Field(alias="_id")
-    name: str = Field(..., min_length=1, description="Unique department name (e.g., Finance)")
+    """Schema for department in database"""
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    document_types: List[DocumentTypeInDB] = Field(default_factory=list, description="Embedded document types")
 
-class DepartmentResponse(DepartmentInDB):
-    pass
+
+
+class DocumentTypeWithDepartment(DocumentTypeInDB):
+    department : DepartmentBase = Field(..., description="Department details")

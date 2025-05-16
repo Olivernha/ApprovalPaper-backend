@@ -1,4 +1,3 @@
-# app/database/mongodb.py
 from motor.motor_asyncio import AsyncIOMotorClient
 from ..config import settings
 
@@ -28,3 +27,4 @@ class MongoDB:
     def get_database(cls):
         """Get database instance."""
         return cls.database
+    
