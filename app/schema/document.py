@@ -109,6 +109,43 @@ class DocumentResponse(DocumentInDB):
     """Schema for API responses."""
     pass
 
+class DocumentPaginationResponse(BaseModel):
+    """Schema for paginated document responses."""
+    total: int = Field(..., description="Total number of documents matching the query")
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Maximum number of documents per page")
+    pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_prev: bool = Field(..., description="Whether there is a previous page")
+    documents: List[DocumentInDB] = Field(..., description="List of documents in the current page")
+    
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {PyObjectId: str, datetime: lambda dt: dt.isoformat()}
+        json_schema_extra = {
+            "example": {
+                "total": 25,
+                "page": 1,
+                "limit": 10,
+                "pages": 3,
+                "has_next": True,
+                "has_prev": False,
+                "documents": [
+                    {
+                        "_id": "66488b368a6801e71d70dfe9",
+                        "ref_no": "IT/001/25",
+                        "title": "Tender Proposal",
+                        "document_type_id": "6825af3e13ad6fad9efe7d1d",
+                        "department_id": "682440853d6cd156e5585927",
+                        "created_by": "helloworld",
+                        "created_date": "2025-05-15T13:00:00Z",
+                        "status": "Not Filed"
+                    }
+                ]
+            }
+        }
+
 class BulkDeleteRequest(BaseModel):
     """Schema for bulk deleting documents."""
     document_ids: List[PyObjectId] = Field(..., description="List of document IDs to delete")

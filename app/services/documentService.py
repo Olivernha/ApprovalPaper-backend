@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Union
+from typing import List, Union, Dict, Any, Optional
 from fastapi import HTTPException, status
 from bson import ObjectId
 
@@ -14,6 +14,7 @@ from app.schema.document import (
     DocumentResponse,
     DocumentUpdateAdmin,
     DocumentUpdateNormal,
+    DocumentPaginationResponse,
 )
 from app.models.documentModel import DocumentModel
 
@@ -98,6 +99,127 @@ class DocumentService:
             return [DocumentInDB(**doc) for doc in documents]
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch documents: {str(e)}")
+
+    async def get_documents_paginated(
+        self, 
+        page: int = 1, 
+        limit: int = 10, 
+        search: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        department_id: Optional[str] = None,
+        document_type_id: Optional[str] = None,
+        sort_field: str = "created_date",
+        sort_order: int = -1
+    ) -> DocumentPaginationResponse:
+        """
+        Retrieve documents with pagination and search filtering
+        
+        Args:
+            page: Current page number (starts from 1)
+            limit: Number of documents per page
+            search: Search query for title or ref_no
+            status_filter: Filter by document status
+            department_id: Filter by department ID
+            document_type_id: Filter by document type ID
+            sort_field: Field to sort by
+            sort_order: Sort order (1 for ascending, -1 for descending)
+            
+        Returns:
+            Paginated document response
+        """
+        try:
+            # Calculate skip value
+            skip = (page - 1) * limit
+            
+            # Build query filter
+            query_filter: Dict[str, Any] = {}
+            
+            # Add search filter
+            if search:
+                query_filter["$or"] = [
+                    {"title": {"$regex": search, "$options": "i"}},
+                    {"ref_no": {"$regex": search, "$options": "i"}},
+                    {"created_by": {"$regex": search, "$options": "i"}}
+                ]
+                
+            # Add status filter
+            if status_filter:
+                valid_statuses = {"Not Filed", "Filed", "Suspended"}
+                if status_filter not in valid_statuses:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid status. Must be one of {valid_statuses}"
+                    )
+                query_filter["status"] = status_filter
+                
+            # Add department filter
+            if department_id:
+                try:
+                    query_filter["department_id"] = ObjectId(department_id)
+                except Exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid department_id format"
+                    )
+                    
+            # Add document type filter
+            if document_type_id:
+                try:
+                    query_filter["document_type_id"] = ObjectId(document_type_id)
+                except Exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid document_type_id format"
+                    )
+            
+            # Validate sort field
+            valid_sort_fields = {
+                "created_date", "title", "ref_no", "status", 
+                "created_by", "filed_date", "filed_by"
+            }
+            if sort_field not in valid_sort_fields:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid sort field. Must be one of {valid_sort_fields}"
+                )
+                
+            # Validate sort order
+            if sort_order not in {1, -1}:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Sort order must be 1 (ascending) or -1 (descending)"
+                )
+                
+            # Count total documents
+            total_documents = await self.get_collection().count_documents(query_filter)
+            
+            # Calculate total pages
+            total_pages = (total_documents + limit - 1) // limit if total_documents > 0 else 1
+            
+            # Get paginated documents
+            cursor = self.get_collection().find(query_filter)\
+                .sort(sort_field, sort_order)\
+                .skip(skip)\
+                .limit(limit)
+                
+            documents = await cursor.to_list(length=limit)
+            
+            # Format response
+            return DocumentPaginationResponse(
+                total=total_documents,
+                page=page,
+                limit=limit,
+                pages=total_pages,
+                has_next=page < total_pages,
+                has_prev=page > 1,
+                documents=[DocumentInDB(**doc) for doc in documents]
+            )
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail=f"Failed to fetch paginated documents: {str(e)}"
+            )
 
     async def update_document(self, document_id: str, update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin]) -> DocumentResponse:
         """Update a document based on user role"""

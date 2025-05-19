@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from typing import List, Union
+from typing import List, Union, Optional
 from app.schema.base import PyObjectId
 from app.schema.document import (
     BulkDeleteRequest,
@@ -9,6 +9,7 @@ from app.schema.document import (
     DocumentResponse,
     DocumentUpdateNormal,
     DocumentUpdateAdmin,
+    DocumentPaginationResponse,
 )
 from app.services.documentService import DocumentService
 
@@ -17,6 +18,32 @@ class DocumentController:
     async def get_documents() -> List[DocumentResponse]:
         try:
             return await DocumentService().get_documents()
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    @staticmethod
+    async def get_documents_paginated(
+        page: int = 1, 
+        limit: int = 10, 
+        search: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        department_id: Optional[str] = None,
+        document_type_id: Optional[str] = None,
+        sort_field: str = "created_date",
+        sort_order: int = -1
+    ) -> DocumentPaginationResponse:
+        """Get documents with pagination and filtering"""
+        try:
+            return await DocumentService().get_documents_paginated(
+                page=page,
+                limit=limit,
+                search=search,
+                status_filter=status_filter,
+                department_id=department_id,
+                document_type_id=document_type_id,
+                sort_field=sort_field,
+                sort_order=sort_order
+            )
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
