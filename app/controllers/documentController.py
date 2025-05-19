@@ -45,3 +45,15 @@ class DocumentController:
             return await service.update_document(document_id, update_data)
         except Exception:
             raise 
+
+    @staticmethod
+    async def delete_document(
+        document_id: PyObjectId,
+        username: str,
+        collection_name: str = COLLECTION_NAME,
+    ) -> dict:
+        try:
+            service = DocumentService(collection_name=collection_name)
+            return await service.delete_document(document_id, username)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

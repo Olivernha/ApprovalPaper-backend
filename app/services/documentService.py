@@ -155,7 +155,36 @@ class DocumentService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update document: {str(e)}")
+    async def delete_document(self, document_id: str, username: str) -> dict:
+        """Delete a document based on user role"""
+        try:
+            # Validate document exists
+            document = await self.get_collection().find_one({"_id": ObjectId(document_id)})
+            print("Document found:", document , "ID:", document_id)
+            if not document:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+            # Check permissions
+            is_admin = await AdminService().is_admin(username)
+            if not is_admin and not await self.is_your_document(document_id, username):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not allowed to delete this document",
+                )
+
+            # Delete the document
+            result = await self.get_collection().delete_one({"_id": ObjectId(document_id)})
+            if result.deleted_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to delete document",
+                )
+
+            return {"message": "Document deleted successfully"}
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete document: {str(e)}")
     async def is_your_document(self, doc_id: str, username: str) -> bool:
         """Check if the document was created by the given username"""
         try:

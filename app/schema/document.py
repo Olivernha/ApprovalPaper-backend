@@ -107,6 +107,9 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
             }
         }
 
+class DocumentDelete(BaseModel):
+    """Schema for deleting a document."""
+    current_user: str = Field(..., description="User who is deleting the document")
 class DocumentResponse(DocumentInDB):
     """Schema for API responses."""
     pass
