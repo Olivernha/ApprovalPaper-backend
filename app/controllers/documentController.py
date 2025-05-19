@@ -1,59 +1,67 @@
-from typing import List
 from fastapi import HTTPException, status
-from app.services.documentService import DocumentService
-from app.schema.document import DocumentCreate, DocumentInDB, DocumentUpdateNormal, DocumentUpdateAdmin
+from typing import List, Union
 from app.schema.base import PyObjectId
+from app.schema.document import (
+    BulkDeleteRequest,
+    BulkUpdateStatusRequest,
+    DocumentCreate,
+    DocumentDelete,
+    DocumentResponse,
+    DocumentUpdateNormal,
+    DocumentUpdateAdmin,
+)
+from app.services.documentService import DocumentService
 
 class DocumentController:
-    COLLECTION_NAME = "documents"
     @staticmethod
-    async def create_document(document: DocumentCreate, collection_name: str = COLLECTION_NAME) -> DocumentInDB:
+    async def get_documents() -> List[DocumentResponse]:
         try:
-            service = DocumentService(collection_name=collection_name)
-            created_document = await service.create_document(document)
-            return created_document
+            return await DocumentService().get_documents()
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    
+
     @staticmethod
-    async def get_documents(collection_name: str = COLLECTION_NAME) -> List[DocumentInDB]:
+    async def create_document(document: DocumentCreate) -> DocumentResponse:
         try:
-            service = DocumentService(collection_name=collection_name)
-            return await service.get_documents()
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-        
-    @staticmethod
-    async def verify_document_by_created_by(doc_id: str, username: str) -> bool:
-        try:
-            service = DocumentService()
-            user = await service.is_your_document(doc_id, username)
-            if not user:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User did not create this document")
-            return True
+            return await DocumentService().create_document(document)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
     async def update_document(
-        document_id: PyObjectId,
-        update_data: DocumentUpdateNormal | DocumentUpdateAdmin,
-        collection_name: str = COLLECTION_NAME
-    ) -> dict:
+        doc_id: PyObjectId,
+        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin]
+    ) -> DocumentResponse:
         try:
-            service = DocumentService(collection_name=collection_name)
-            return await service.update_document(document_id, update_data)
-        except Exception:
-            raise 
+            return await DocumentService().update_document(doc_id, update_data)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
     async def delete_document(
         document_id: PyObjectId,
-        username: str,
-        collection_name: str = COLLECTION_NAME,
+        document_delete: DocumentDelete,
+       
     ) -> dict:
         try:
-            service = DocumentService(collection_name=collection_name)
-            return await service.delete_document(document_id, username)
+            return await DocumentService().delete_document(document_id, document_delete.current_user)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+    @staticmethod
+    async def bulk_delete_documents(
+        bulk_delete: BulkDeleteRequest,
+    ) -> dict:
+        try:
+            return await DocumentService().bulk_delete_documents(bulk_delete)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    @staticmethod
+    async def bulk_update_status(
+        bulk_update: BulkUpdateStatusRequest,
+    ) -> dict:
+        try:
+            return await DocumentService().bulk_update_status(bulk_update)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

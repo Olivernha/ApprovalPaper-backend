@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
@@ -6,8 +6,6 @@ from .base import PyObjectId
 
 class Document(BaseModel):
     """Base class for document models."""
-
-
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -30,7 +28,6 @@ class DocumentCreate(Document):
     document_type_id: PyObjectId = Field(..., description="Reference to DocumentType ID")
     department_id: PyObjectId = Field(..., description="Reference to Department ID")
     created_by: str = Field(..., description="User who created the document")
-
     class Config:
         json_schema_extra = {
             "example": {
@@ -53,7 +50,6 @@ class DocumentInDB(Document):
     filed_by: Optional[str] = Field(None, description="User who filed the document")
     filed_date: Optional[datetime] = Field(None, description="Filing timestamp")
     status: str = Field(default="Not Filed", description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -82,7 +78,6 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
     filed_date: Optional[str] = Field(None, description="Filing date in DD/MM/YYYY format")
     filed_by: Optional[str] = Field(None, min_length=1, description="User who filed the document")
     status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-
     @field_validator("created_date", "filed_date")
     def validate_date_format(cls, v):
         if v is None:
@@ -92,7 +87,6 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
         except ValueError:
             raise ValueError("Date must be in DD/MM/YYYY format")
         return v
-
     class Config:
         json_schema_extra = {
             "example": {
@@ -103,13 +97,52 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
                 "filed_date": "26/03/2026",
                 "filed_by": "nay",
                 "status": "Filed",
-                "username": "admin_user"
+                "current_user": "admin_user"
             }
         }
 
 class DocumentDelete(BaseModel):
     """Schema for deleting a document."""
     current_user: str = Field(..., description="User who is deleting the document")
+
 class DocumentResponse(DocumentInDB):
     """Schema for API responses."""
     pass
+
+class BulkDeleteRequest(BaseModel):
+    """Schema for bulk deleting documents."""
+    document_ids: List[PyObjectId] = Field(..., description="List of document IDs to delete")
+    current_user: str = Field(..., description="Admin user performing the bulk delete")
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {PyObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "document_ids": [
+                    "66488b368a6801e71d70dfe9",
+                    "66488b368a6801e71d70dfea"
+                ],
+                "current_user": "admin_user"
+            }
+        }
+
+class BulkUpdateStatusRequest(BaseModel):
+    """Schema for bulk updating document statuses."""
+    document_ids: List[PyObjectId] = Field(..., description="List of document IDs to update")
+    status: str = Field(..., description="New status for documents", pattern="^(Not Filed|Filed|Suspended)$")
+    current_user: str = Field(..., description="Admin user performing the bulk update")
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {PyObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "document_ids": [
+                    "66488b368a6801e71d70dfe9",
+                    "66488b368a6801e71d70dfea"
+                ],
+                "status": "Filed",
+                "current_user": "admin_user"
+            }
+        }
