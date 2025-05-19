@@ -3,7 +3,7 @@ from typing import List
 from app.controllers.departmentController import DepartmentController
 from app.schema.base import PyObjectId
 from app.schema.department import DepartmentCreate, DepartmentResponse, DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
-from app.config import settings
+from app.config.settings import settings
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/department",

@@ -12,7 +12,7 @@ from app.schema.document import (
     DocumentUpdateAdmin,
 )
 from app.schema.base import PyObjectId
-from app.config import settings
+from app.config.settings import settings
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/document",

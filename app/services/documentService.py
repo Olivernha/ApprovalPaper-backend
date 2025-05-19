@@ -410,3 +410,89 @@ class DocumentService:
             await DocumentModel.ensure_indexes()
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to ensure indexes: {str(e)}")
+        
+
+    # fn for seed data
+    async def bulk_create_documents(self, documents: List[DocumentCreate]) -> List[DocumentInDB]:
+        """Create multiple documents in bulk"""
+        try:
+            db = MongoDB.get_database()
+            if db is None:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database connection failed")
+
+            created_documents = []
+            year = datetime.now().year
+
+            for document in documents:
+                # Validate department and document type
+                document.department_id = PyObjectId(document.department_id)
+                document.document_type_id = PyObjectId(document.document_type_id)
+                dept_check = await db["departments"].find_one(
+                    {
+                        "_id": document.department_id,
+                        "document_types": {"$elemMatch": {"_id": document.document_type_id}}
+                    }
+                )
+                if not dept_check:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid department_id or document_type_id for {document.title}")
+
+                # Get prefix from document type
+                cursor = db["departments"].aggregate([
+                    {"$match": {"_id": document.department_id}},
+                    {"$unwind": "$document_types"},
+                    {"$match": {"document_types._id": document.document_type_id}},
+                    {"$project": {"prefix": "$document_types.prefix", "padding": "$document_types.padding"}}
+                ])
+                doc_type = await cursor.to_list(length=1)
+                if not doc_type:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Document type not found for {document.title}")
+                doc_type = doc_type[0]
+
+                # Generate reference number
+                counter_doc = await db["sequence_counters"].find_one_and_update(
+                    {
+                        "department_id": document.department_id,
+                        "document_type_id": document.document_type_id,
+                        "year": year
+                    },
+                    {"$inc": {"sequence_value": 1}},
+                    upsert=True,
+                    return_document=True
+                )
+                if not counter_doc.get("sequence_value"):
+                    counter_doc["sequence_value"] = 1
+                    counter_doc["padding"] = doc_type.get("padding", 3)
+
+                padded_seq = str(counter_doc["sequence_value"]).zfill(counter_doc.get("padding", 3))
+                year_suffix = str(year % 100)
+                ref_no = f"{doc_type['prefix']}/{padded_seq}/{year_suffix}"
+
+                # Check for duplicate ref_no
+                existing = await self.get_collection().find_one({"ref_no": ref_no})
+                if existing:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Reference number {ref_no} exists")
+
+                # Prepare document data
+                document_data = document.model_dump()
+                document_data.update({
+                    "_id": ObjectId(),
+                    "ref_no": ref_no,
+                    "created_date": datetime.now(),
+                    "status": "Not Filed",
+                    "created_by": document_data.get("created_by"),
+                })
+
+                created_documents.append(document_data)
+
+            # Insert all documents in one operation
+            result = await self.get_collection().insert_many(created_documents)
+            
+            # Convert to DocumentInDB objects
+            inserted_docs = []
+            for doc_data in created_documents:
+                inserted_docs.append(DocumentInDB(**doc_data))
+            
+            return inserted_docs
+
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to bulk create documents: {str(e)}")

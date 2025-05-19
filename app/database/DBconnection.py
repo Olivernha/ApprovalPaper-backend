@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from ..config import settings
+from ..config.settings import settings
 
 class MongoDB:
     client: AsyncIOMotorClient = None
@@ -11,8 +11,6 @@ class MongoDB:
         if cls.client is None:
             cls.client = AsyncIOMotorClient(settings.MONGODB_URL)
             cls.database = cls.client[settings.DATABASE_NAME]
-            print(f"Connected to MongoDB at {settings.MONGODB_URL}")
-            print(f"Using database: {settings.DATABASE_NAME}")
     
     @classmethod
     async def close_database_connection(cls):

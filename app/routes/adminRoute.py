@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 from typing import List
 from ..schema.admin import AdminUser
 from ..controllers.userController import UserController
-from ..config import settings
+from ..config.settings import settings
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/users",
