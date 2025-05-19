@@ -1,9 +1,4 @@
-
-from bson import ObjectId
-
 from app.database import MongoDB
-from app.schema.department import DepartmentInDB
-
 
 class DepartmentModel:
     COLLECTION_NAME = "departments"

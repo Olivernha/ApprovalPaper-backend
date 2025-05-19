@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from ..database import MongoDB
-from ..schema import AdminUser
+from ..schema.admin import AdminUser
 
 
 class AdminService:
@@ -16,6 +16,14 @@ class AdminService:
         if user is None:
             return None
         return AdminUser(**user)  
+    
+
+    async def is_admin(self, username: str) -> bool:
+        """Check if the user is an admin."""
+        user = await self.get_user_by_username(username)
+        if user:
+            return True
+        return False
     async def create_user(self, user: dict) -> AdminUser:
         """Create a new user in the database."""
         existing_user = await self.get_user_by_username(user.get("username"))

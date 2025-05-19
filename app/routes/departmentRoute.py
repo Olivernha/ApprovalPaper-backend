@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Path, status
 from typing import List
-from app.controllers import DepartmentController
+from app.controllers.departmentController import DepartmentController
 from app.schema.base import PyObjectId
-from app.schema.department import DepartmentCreate, DepartmentInDB, DepartmentResponse, DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
+from app.schema.department import DepartmentCreate, DepartmentResponse, DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
 from app.config import settings
 
 router = APIRouter(

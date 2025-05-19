@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 from typing import List
-from ..schema import AdminUser
-from ..controllers import UserController
+from ..schema.admin import AdminUser
+from ..controllers.userController import UserController
 from ..config import settings
 
 router = APIRouter(

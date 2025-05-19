@@ -1,10 +1,13 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
+
 from .base import PyObjectId
 
 class Document(BaseModel):
     """Base class for document models."""
+
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -29,7 +32,6 @@ class DocumentCreate(Document):
     created_by: str = Field(..., description="User who created the document")
 
     class Config:
-        populate_by_name = True
         json_schema_extra = {
             "example": {
                 "created_by": "helloworld",
@@ -44,8 +46,8 @@ class DocumentInDB(Document):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     ref_no: str = Field(..., min_length=1, description="Unique reference number")
     title: str = Field(..., min_length=1, description="Document title")
-    document_type_id: PyObjectId = Field(..., description="Reference to DocumentType ID")  # Changed to PyObjectId
-    department_id: PyObjectId = Field(..., description="Reference to Department ID")  # Changed to PyObjectId
+    document_type_id: PyObjectId = Field(..., description="Reference to DocumentType ID")
+    department_id: PyObjectId = Field(..., description="Reference to Department ID")
     created_by: str = Field(..., description="User who created the document")
     created_date: datetime = Field(..., description="Creation timestamp")
     filed_by: Optional[str] = Field(None, description="User who filed the document")
@@ -56,6 +58,54 @@ class DocumentInDB(Document):
         populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {PyObjectId: str, datetime: lambda dt: dt.isoformat()}
+
+class DocumentUpdateNormal(BaseModel):
+    """Schema for normal user document update."""
+    title: Optional[str] = Field(None, min_length=1, description="Document title")
+    department_id: Optional[PyObjectId] = Field(None, description="Reference to Department ID")
+    document_type_id: Optional[PyObjectId] = Field(None, description="Reference to DocumentType ID")
+    current_user: Optional[str] = Field(None, description="Current user making the update")
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Updated Tender Proposal",
+                "document_type_id": "6825af3e13ad6fad9efe7d1d",
+                "current_user": "helloworld",
+                "department_id": "682440853d6cd156e5585927"
+            }
+        }
+
+class DocumentUpdateAdmin(DocumentUpdateNormal):
+    """Schema for admin document update."""
+    created_date: Optional[str] = Field(None, description="Creation date in DD/MM/YYYY format")
+    created_by: Optional[str] = Field(None, min_length=1, description="User who created the document")
+    filed_date: Optional[str] = Field(None, description="Filing date in DD/MM/YYYY format")
+    filed_by: Optional[str] = Field(None, min_length=1, description="User who filed the document")
+    status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
+
+    @field_validator("created_date", "filed_date")
+    def validate_date_format(cls, v):
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%d/%m/%Y")
+        except ValueError:
+            raise ValueError("Date must be in DD/MM/YYYY format")
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Updated Tender Proposal",
+                "document_type_id": "6825af3e13ad6fad9efe7d1d",
+                "created_date": "25/02/2026",
+                "created_by": "alvin",
+                "filed_date": "26/03/2026",
+                "filed_by": "nay",
+                "status": "Filed",
+                "username": "admin_user"
+            }
+        }
 
 class DocumentResponse(DocumentInDB):
     """Schema for API responses."""

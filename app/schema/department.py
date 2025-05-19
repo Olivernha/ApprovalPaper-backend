@@ -1,7 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-from . import DocumentTypeCreate, DocumentTypeInDB
+from .documentType import DocumentTypeCreate, DocumentTypeInDB
 from .base import PyObjectId
 class Department(BaseModel):
     """Base department model"""

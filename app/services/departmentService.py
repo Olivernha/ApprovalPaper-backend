@@ -3,9 +3,7 @@ from bson import ObjectId
 from typing import List
 from app.database import MongoDB
 from app.models.departmentModel import DepartmentModel
-from app.schema import DepartmentCreate, DepartmentInDB, DocumentTypeCreate, DocumentTypeInDB
-from app.schema.department import  DepartmentBase, DocumentTypeWithDepartment
-
+from app.schema.department import DepartmentCreate, DepartmentInDB, DocumentTypeCreate, DocumentTypeInDB, DepartmentBase, DocumentTypeWithDepartment
 
 class DepartmentService:
     def __init__(self, collection_name: str = "departments"):
@@ -93,7 +91,18 @@ class DepartmentService:
             return all_doc_types
        except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
 
+
+    async def has_document_type_in_deptartment(self, department_id: str, doc_type_id: str) -> bool:
+        """Check if a document type exists in a department"""
+        department = await self.get_collection().find_one({"_id": ObjectId(department_id)})
+        if not department:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+
+        doc_types = department.get("document_types", [])
+        return any(dt["_id"] == ObjectId(doc_type_id) for dt in doc_types)
+    
     @staticmethod
     async def ensure_indexes() -> None:
         """Ensure indexes for the department collection"""

@@ -1,13 +1,12 @@
-from ..database.DBconnection import MongoDB
-from ..schema.document import DocumentInDB
+from app.database import MongoDB
 
 class DocumentModel:
-    """MongoDB-specific logic for the documents collection"""
     COLLECTION_NAME = "documents"
 
-    @classmethod
-    async def ensure_indexes(cls):
-        """Create indexes for the documents collection"""
+    @staticmethod
+    async def ensure_indexes() -> None:
+        """Create indexes for the document collection"""
         db = MongoDB.get_database()
-        await db[cls.COLLECTION_NAME].create_index("ref_no", unique=True)
-    
+        await db[DocumentModel.COLLECTION_NAME].create_index("document_type_id")
+        await db[DocumentModel.COLLECTION_NAME].create_index("department_id")
+        await db[DocumentModel.COLLECTION_NAME].create_index("ref_no", unique=True)

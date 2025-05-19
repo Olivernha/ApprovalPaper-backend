@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import HTTPException, status
-from app.services import AdminService
-from ..schema import AdminUser
+from app.services.adminService import AdminService
+from ..schema.admin import AdminUser
 
 class UserController:
     @staticmethod
@@ -33,3 +33,6 @@ class UserController:
             return user
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        
+    
+  

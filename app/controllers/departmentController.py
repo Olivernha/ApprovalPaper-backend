@@ -1,9 +1,9 @@
 from fastapi import HTTPException, status
 from typing import List
 from app.schema.base import PyObjectId
-from app.schema import DepartmentCreate, DepartmentInDB
+from app.schema.department import DepartmentCreate, DepartmentInDB
 from app.schema.documentType import DocumentTypeCreate, DocumentTypeInDB
-from app.services import DepartmentService
+from app.services.departmentService import DepartmentService
 
 class DepartmentController:
     @staticmethod
