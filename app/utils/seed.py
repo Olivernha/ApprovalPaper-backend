@@ -1,49 +1,81 @@
-from datetime import datetime
 from bson import ObjectId
 from faker import Faker
 from app.database import MongoDB
-from app.schema.document import DocumentCreate
+from app.schema.document import DocumentCreate, DocumentUpdateAdmin
+from app.schema.admin import AdminUser
 from app.schema.base import PyObjectId
 from app.services.documentService import DocumentService
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from typing import List, Dict
 import random
+import io
+import logging
 
 # Initialize Faker
 fake = Faker()
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+
+async def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
+    """Get GridFS bucket after ensuring database connection"""
+    db = MongoDB.get_database()
+    if db is None:
+        logger.error("Database connection not established")
+        raise Exception("Database connection not established")
+    return AsyncIOMotorGridFSBucket(db)
+
+
+async def seed_users() -> List[Dict]:
+    """Seed 10 users with usernames"""
+    db = MongoDB.get_database()
+    users = []
+    usernames = set()
+
+    while len(usernames) < 10:
+        usernames.add(fake.user_name())
+    usernames = list(usernames)
+
+    for username in usernames:
+        user = AdminUser(username=username)
+        users.append(user.model_dump(by_alias=True))
+        users[-1]["_id"] = ObjectId()
+
+    await db["users"].delete_many({})
+    await db["users"].insert_many(users)
+    logger.info(f"Seeded {len(users)} users")
+    return users
+
+
 async def seed_departments() -> List[Dict]:
-    """Seed 20 departments with 20 document types each using Faker"""
+    """Seed 20 departments with 20 document types using Faker"""
     db = MongoDB.get_database()
 
-    # Generate 20 unique department names
     department_names = set()
     while len(department_names) < 20:
         dept_name = fake.catch_phrase().title() + " Department"
         department_names.add(dept_name)
     department_names = list(department_names)
 
-    # Base document type templates
-    base_templates = [
+    document_type_templates = [
         "Proposal", "Report", "Contract", "Specification", "Audit",
         "Manual", "Plan", "Review", "Invoice", "Policy",
         "Agreement", "Budget", "Assessment", "Memo", "Procedure",
         "Schedule", "Analysis", "Forecast", "Guideline", "Summary"
     ]
 
-    document_type_templates = base_templates[:20]
-
     departments = []
-    for dept_name in department_names:
-        doc_types = []
-        for doc_type in document_type_templates:
-            prefix = f"{dept_name[:3].upper()}-{doc_type[:4].upper()}-{random.randint(1000,9999)}"
-            doc_types.append({
+    for i, dept_name in enumerate(department_names):
+        doc_types = [
+            {
                 "_id": ObjectId(),
-                "name": doc_type,
-                "prefix": prefix,
+                "name": document_type_templates[i],
+                "prefix": f"{dept_name[:3].upper()}-{document_type_templates[i][:4].upper()}",
                 "padding": 4
-            })
-
+            }
+        ]
         departments.append({
             "_id": ObjectId(),
             "name": dept_name,
@@ -51,65 +83,51 @@ async def seed_departments() -> List[Dict]:
         })
 
     await db["departments"].delete_many({})
-    await db["departments"].insert_many(departments)
-
-    total_doc_types = sum(len(d["document_types"]) for d in departments)
-    print(f"Seeded {len(departments)} departments with {total_doc_types} document types")
+    result = await db["departments"].insert_many(departments)
+    logger.info(
+        f"Seeded {len(departments)} departments with {sum(len(d['document_types']) for d in departments)} document types")
     return departments
 
-
-async def seed_documents(departments: List[Dict]) -> None:
-    """Seed 100 documents across departments and document types using Faker"""
+async def seed_documents(departments: List[Dict], users: List[Dict]) -> None:
+    """Seed 100 documents without attaching dummy PDF files"""
     db = MongoDB.get_database()
-    users = [fake.user_name() for _ in range(10)]  # 10 unique users
-
-    documents = []
-    total_target = 100
-    all_doc_types = [(dept["_id"], dt["_id"], dt["name"]) for dept in departments for dt in dept["document_types"]]
-    random.shuffle(all_doc_types)
-
-    i = 0
-    while len(documents) < total_target:
-        for dept_id, doc_type_id, doc_type_name in all_doc_types:
-            if len(documents) >= total_target:
-                break
-            title = f"{doc_type_name} for {fake.bs().title()} {i+1}"
-            doc = DocumentCreate(
-                title=title,
-                document_type_id=PyObjectId(doc_type_id),
-                department_id=PyObjectId(dept_id),
-                created_by=random.choice(users)
-            )
-            documents.append(doc)
-            i += 1
-
+    usernames = [user["username"] for user in users]
+    document_service = DocumentService()
+    docs_per_type = 5
     await db["documents"].delete_many({})
+    for dept in departments:
+        for doc_type in dept["document_types"]:
+            for i in range(docs_per_type):
+                title = f"{doc_type['name']} for {fake.bs().title()} {i + 1}"
 
-    try:
-        created_docs = await DocumentService().bulk_create_documents(documents)
-        print(f"Successfully created {len(created_docs)} documents")
-    except Exception as e:
-        print(f"Error during bulk document creation: {str(e)}")
-        raise
+                # Create document without file
+                doc = DocumentCreate(
+                    title=title,
+                    document_type_id=PyObjectId(doc_type["_id"]),
+                    department_id=PyObjectId(dept["_id"]),
+                    created_by=random.choice(usernames)
+                )
+                created_doc = await document_service.create_document(doc)
+                logger.info(f"Created document: {created_doc.title} (ID: {created_doc.id})")
 
+    doc_count = await db["documents"].count_documents({})
+    logger.info(f"Seeded {doc_count} documents (no files attached)")
+    if doc_count < 100:
+        logger.warning(f"Seeded only {doc_count} documents, expected 100")
 
 async def seed_data():
-    """Seed departments and documents"""
+    """Seed all data (10 users, 20 departments, 20 document types, 100 documents with GridFS files)"""
     try:
-        print("Seeding departments...")
+        logger.info("Seeding users...")
+        users = await seed_users()
+
+        logger.info("Seeding departments...")
         departments = await seed_departments()
 
-        print("Seeding documents...")
-        await seed_documents(departments)
+        logger.info("Seeding documents...")
+        await seed_documents(departments, users)
 
-        db = MongoDB.get_database()
-        doc_count = await db["documents"].count_documents({})
-        print(f" Seeded {doc_count} documents")
-
-        if doc_count < 100:
-            print(f" Warning: Seeded only {doc_count} documents, expected 100")
-
-        print("Database seeded successfully")
+        logger.info("Database seeded successfully")
     except Exception as e:
-        print(f" Error seeding database: {str(e)}")
+        logger.error(f"Error seeding database: {str(e)}")
         raise

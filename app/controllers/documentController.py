@@ -32,7 +32,6 @@ class DocumentController:
         sort_field: str = "created_date",
         sort_order: int = -1
     ) -> DocumentPaginationResponse:
-        """Get documents with pagination and filtering"""
         try:
             return await DocumentService().get_documents_paginated(
                 page=page,
@@ -60,7 +59,7 @@ class DocumentController:
         update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin]
     ) -> DocumentResponse:
         try:
-            return await DocumentService().update_document(doc_id, update_data)
+            return await DocumentService().update_document(str(doc_id), update_data)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -68,10 +67,9 @@ class DocumentController:
     async def delete_document(
         document_id: PyObjectId,
         document_delete: DocumentDelete,
-       
     ) -> dict:
         try:
-            return await DocumentService().delete_document(document_id, document_delete.current_user)
+            return await DocumentService().delete_document(str(document_id), document_delete.current_user)
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 

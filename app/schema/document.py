@@ -50,6 +50,7 @@ class DocumentInDB(Document):
     filed_by: Optional[str] = Field(None, description="User who filed the document")
     filed_date: Optional[datetime] = Field(None, description="Filing timestamp")
     status: str = Field(default="Not Filed", description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
+    file_id: Optional[str] = None
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -61,13 +62,14 @@ class DocumentUpdateNormal(BaseModel):
     department_id: Optional[PyObjectId] = Field(None, description="Reference to Department ID")
     document_type_id: Optional[PyObjectId] = Field(None, description="Reference to DocumentType ID")
     current_user: Optional[str] = Field(None, description="Current user making the update")
+    file_id: Optional[str] = Field(None, description="GridFS file ID for the uploaded document")
     class Config:
         json_schema_extra = {
             "example": {
                 "title": "Updated Tender Proposal",
                 "document_type_id": "6825af3e13ad6fad9efe7d1d",
                 "current_user": "helloworld",
-                "department_id": "682440853d6cd156e5585927"
+                "department_id": "682440853d6cd156e5585927",
             }
         }
 
@@ -78,15 +80,7 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
     filed_date: Optional[str] = Field(None, description="Filing date in DD/MM/YYYY format")
     filed_by: Optional[str] = Field(None, min_length=1, description="User who filed the document")
     status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-    @field_validator("created_date", "filed_date")
-    def validate_date_format(cls, v):
-        if v is None:
-            return v
-        try:
-            datetime.strptime(v, "%d/%m/%Y")
-        except ValueError:
-            raise ValueError("Date must be in DD/MM/YYYY format")
-        return v
+    file_id: Optional[str] = Field(None, description="GridFS file ID for the uploaded document")
     class Config:
         json_schema_extra = {
             "example": {
