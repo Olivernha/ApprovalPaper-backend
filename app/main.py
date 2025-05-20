@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from app.database import MongoDB
+from app.models.userModel import UserModel
 from app.routes import adminRoute, documentRoute, departmentRoute
 from app.models.departmentModel import DepartmentModel
 from app.models.documentModel import DocumentModel
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         logger.info("Ensuring database indexes...")
         await DepartmentModel.ensure_indexes()
         await DocumentModel.ensure_indexes()
+        # await UserModel.ensure_indexes() # NO NEED
         logger.info("Database indexes ensured")
 
         # Seed data if configured
