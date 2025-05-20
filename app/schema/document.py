@@ -75,10 +75,10 @@ class DocumentUpdateNormal(BaseModel):
 
 class DocumentUpdateAdmin(DocumentUpdateNormal):
     """Schema for admin document update."""
-    created_date: Optional[str] = Field(None, description="Creation date in DD/MM/YYYY format")
+    created_date: Optional[str] = Field(None, description="Creation date of the document")
     created_by: Optional[str] = Field(None, min_length=1, description="User who created the document")
-    filed_date: Optional[str] = Field(None, description="Filing date in DD/MM/YYYY format")
-    filed_by: Optional[str] = Field(None, min_length=1, description="User who filed the document")
+    filed_date: Optional[str] = Field(None, description="Filing date of the document")
+    filed_by: Optional[str] = Field(None, description="User who filed the document")
     status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
     file_id: Optional[str] = Field(None, description="GridFS file ID for the uploaded document")
     class Config:

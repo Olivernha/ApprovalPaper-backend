@@ -19,15 +19,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-async def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
-    """Get GridFS bucket after ensuring database connection"""
-    db = MongoDB.get_database()
-    if db is None:
-        logger.error("Database connection not established")
-        raise Exception("Database connection not established")
-    return AsyncIOMotorGridFSBucket(db)
-
-
 async def seed_users() -> List[Dict]:
     """Seed 10 users with usernames"""
     db = MongoDB.get_database()

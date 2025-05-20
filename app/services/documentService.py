@@ -123,11 +123,18 @@ class DocumentService:
                     update_dict["filed_date"] = datetime.now()
                     update_dict["created_date"] = document.get("created_date", datetime.now())
                     update_dict["filed_date"] = document.get("filed_date", datetime.now())
-                
+                elif update_dict.get("status") == "Not Filed":
+                    update_dict["filed_by"] = None
+                    update_dict["filed_date"] = None
+                elif update_dict.get("status") == "Suspended":
+                    update_dict["filed_by"] = None
+                    update_dict["filed_date"] = None
+                else:
+                    pass
             else:
-                if not isinstance(update_data, DocumentUpdateNormal):
+                if not isinstance(update_dict, DocumentUpdateNormal):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                        detail="Admin fields not allowed for normal users")
+                                        detail="Admin fields not allowed to updatefor normal users")
                 allowed_fields = {"title", "document_type_id", "department_id", "current_user", "file_id"}
                 if any(field not in allowed_fields for field in update_dict):
                     raise HTTPException(

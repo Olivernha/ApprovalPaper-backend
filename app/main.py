@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from app.database import MongoDB
+from app.models.userModel import UserModel
+from app.routes import adminRoute, documentRoute, departmentRoute
 from app.models.departmentModel import DepartmentModel
 from app.models.documentModel import DocumentModel
-from app.routes import attachmentRoute, departmentRoute, adminRoute, documentRoute
 from app.utils.seed import seed_data
 from app.config.settings import settings
 import logging
@@ -30,12 +31,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
         # Ensure indexes
         logger.info("Ensuring database indexes...")
-        # await DepartmentModel.ensure_indexes()
-        # await DocumentModel.ensure_indexes()
+        await DepartmentModel.ensure_indexes()
+        await DocumentModel.ensure_indexes()
         # await UserModel.ensure_indexes() # NO NEED
         logger.info("Database indexes ensured")
 
-        #Seed data if configured
+        # Seed data if configured
         # if settings.SEED_DATA_ON_STARTUP:
         #     logger.info("Seeding initial data...")
         #     await seed_data()
@@ -65,7 +66,6 @@ app = FastAPI(
 app.include_router(departmentRoute.router)
 app.include_router(adminRoute.router)
 app.include_router(documentRoute.router)
-app.include_router(attachmentRoute.router)
 
 @app.get("/health")
 async def health_check():

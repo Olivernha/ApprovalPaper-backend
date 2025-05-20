@@ -31,7 +31,7 @@ async def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
     db = MongoDB.get_database()
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database connection not established")
-    return AsyncIOMotorGridFSBucket(db)
+    return AsyncIOMotorGridFSBucket(db,bucket_name=settings.GRIDFS_BUCKET_NAME)
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_documents():
@@ -83,10 +83,10 @@ async def update_document(
         department_id: Optional[PyObjectId] = Form(None),
         doc_status: Optional[str] = Form(None, pattern="^(Not Filed|Filed|Suspended)$"),
         created_date: Optional[str] = Form(None, description="DD/MM/YYYY"),
-        created_by: Optional[str] = Form(None, min_length=1),
+        created_by: Optional[str] = Form(None),
         filed_date: Optional[str] = Form(None, description="DD/MM/YYYY"),
-        filed_by: Optional[str] = Form(None, min_length=1),
-        file: Optional[UploadFile] = File(None),
+        filed_by: Optional[str] = Form(None),
+        file: Optional[UploadFile] = File(None, description="File to upload"),
         current_user: str = Form(description="User who is updating the document"),
         gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
 ):
@@ -94,6 +94,7 @@ async def update_document(
     try:
         # Determine update schema based on user role
         is_admin = await AdminService().is_admin(current_user)
+        print(f"User {current_user} is admin: {is_admin}")
         update_data = DocumentUpdateAdmin(
             title=title,
             document_type_id=document_type_id,
@@ -113,12 +114,13 @@ async def update_document(
 
         # Handle file upload
         file_id = None
+        
         if file:
             # IMAGE ALLOWED
             allowed_types = [
                 "application/pdf",
                 "application/msword",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  
                 "text/plain",
                 "image/jpeg",
                 "image/png",
@@ -233,41 +235,3 @@ async def download_document(
         raise http_exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
-
-
-@router.post("/attachment", status_code=status.HTTP_201_CREATED )
-async def upload_attachment(
-    file: UploadFile = File(...),
-    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
-):
-    """Upload a file to GridFS"""
-    try:
-        # Validate file type
-        allowed_types = [
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain",
-            "image/jpeg",
-            "image/png",
-            "image/jpg",
-        ]
-        if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}")
-
-        # Validate file size
-        max_size = 10 * 1024 * 1024  # 10MB
-        content = await file.read()
-        if len(content) > max_size:
-            raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
-
-        # Upload to GridFS
-        file_id = await gridfs_bucket.upload_from_stream(
-            filename=file.filename,
-            source=content,
-            metadata={"content_type": file.content_type}
-        )
-
-        return {"file_id": str(file_id)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GridFS upload failed: {str(e)}")

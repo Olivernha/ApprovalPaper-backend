@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "document_management"
     API_V1_PREFIX: str = "/api/v1"
     SEED_DATA_ON_STARTUP: bool = False  # Set to True to seed data on startup
-
+    GRIDFS_BUCKET_NAME: str = "attachment"  # Replace with your actual bucket name
 
     
     class Config:
