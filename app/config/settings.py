@@ -2,7 +2,7 @@
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Approval Document System"
+    PROJECT_NAME: str = "Approval Paper System"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
     HOST: str = "0.0.0.0"

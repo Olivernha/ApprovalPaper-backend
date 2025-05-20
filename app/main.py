@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Document Management System API",
+    description="Approval Paper Management API",
     lifespan=lifespan
 )
 
