@@ -42,7 +42,6 @@ class DepartmentService:
 
         return DepartmentInDB(**department_dict)
 
-
     async def add_document_type(self, department_id: str, doc_type: DocumentTypeCreate) -> DepartmentInDB:
         """Add a document type to an existing department"""
         department = await self.get_collection().find_one({"_id": ObjectId(department_id)})
@@ -77,7 +76,7 @@ class DepartmentService:
 
     async def get_all_document_types_with_departments(self) -> List[DocumentTypeWithDepartment]:
        try:
-            departments = await self.get_collection().find().to_list(length=100)
+            departments = await self.get_collection().find().to_list()
             all_doc_types = []
             for dept in departments:
                 department = DepartmentBase(**dept)

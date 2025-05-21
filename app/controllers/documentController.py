@@ -1,11 +1,11 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from typing import List, Union, Optional
+from app.schema.admin import AuthInAdminDB
 from app.schema.base import PyObjectId
 from app.schema.document import (
     BulkDeleteRequest,
     BulkUpdateStatusRequest,
     DocumentCreate,
-    DocumentDelete,
     DocumentResponse,
     DocumentUpdateNormal,
     DocumentUpdateAdmin,
@@ -47,46 +47,50 @@ class DocumentController:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
-    async def create_document(document: DocumentCreate) -> DocumentResponse:
+    async def create_document(document: DocumentCreate, current_user: AuthInAdminDB) -> DocumentResponse:
         try:
+            document.created_by = current_user.username  # Set created_by from header
             return await DocumentService().create_document(document)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
     async def update_document(
-        doc_id: PyObjectId,
-        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin]
+        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
+        current_user_data: AuthInAdminDB,
     ) -> DocumentResponse:
         try:
-            return await DocumentService().update_document(str(doc_id), update_data)
+            return await DocumentService().update_document(update_data,current_user_data)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
     async def delete_document(
         document_id: PyObjectId,
-        document_delete: DocumentDelete,
+        current_user_data: AuthInAdminDB
     ) -> dict:
         try:
-            return await DocumentService().delete_document(str(document_id), document_delete.current_user)
+            return await DocumentService().delete_document(str(document_id), current_user_data.username)
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
-
+        
     @staticmethod
     async def bulk_delete_documents(
         bulk_delete: BulkDeleteRequest,
+        current_user_data: AuthInAdminDB,
     ) -> dict:
         try:
-            return await DocumentService().bulk_delete_documents(bulk_delete)
+            return await DocumentService().bulk_delete_documents(bulk_delete,current_user_data)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @staticmethod
     async def bulk_update_status(
         bulk_update: BulkUpdateStatusRequest,
+        current_user_data: AuthInAdminDB,
     ) -> dict:
         try:
-            return await DocumentService().bulk_update_status(bulk_update)
+            
+            return await DocumentService().bulk_update_status(bulk_update, current_user_data)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

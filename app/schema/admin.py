@@ -19,3 +19,7 @@ class AdminUser(BaseModel):
             }
         }
     )
+
+class AuthInAdminDB(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, description="Unique username")
+    is_admin: bool = Field(..., description="Is the user an admin")

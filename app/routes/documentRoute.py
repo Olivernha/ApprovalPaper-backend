@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException, Path, Query, status, Form, File, UploadFile, Depends
+from fastapi import APIRouter, HTTPException, Path, Query, Request, status, Form, File, UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, Union, Optional
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from app.controllers.documentController import DocumentController
 from app.database import MongoDB
+from app.dependencies.auth import get_current_user_from_header
+from app.schema.admin import AuthInAdminDB
 from app.schema.document import (
     BulkDeleteRequest,
     BulkUpdateStatusRequest,
     DocumentCreate,
-    DocumentDelete,
     DocumentResponse,
     DocumentPaginationResponse,
     DocumentUpdateNormal,
@@ -16,8 +17,8 @@ from app.schema.document import (
 )
 from app.schema.base import PyObjectId
 from app.config.settings import settings
-import mimetypes
-
+from bson.errors import InvalidId
+from fastapi.responses import StreamingResponse
 from app.services.adminService import AdminService
 
 router = APIRouter(
@@ -68,53 +69,59 @@ async def get_documents_paginated(
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DocumentResponse)
-async def create_document(document: DocumentCreate):
+async def create_document(document: DocumentCreate, current_user: AuthInAdminDB = Depends(get_current_user_from_header)):
     try:
-        return await DocumentController.create_document(document)
+        return await DocumentController.create_document(document, current_user)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.put("/{doc_id}", status_code=status.HTTP_200_OK, response_model=DocumentResponse)
 async def update_document(
+        current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
         doc_id: PyObjectId = Path(..., title="Document ID", description="The ObjectId of the document"),
         title: Optional[str] = Form(None, min_length=1, max_length=200),
         document_type_id: Optional[PyObjectId] = Form(None),
         department_id: Optional[PyObjectId] = Form(None),
         doc_status: Optional[str] = Form(None, pattern="^(Not Filed|Filed|Suspended)$"),
-        created_date: Optional[str] = Form(None, description="DD/MM/YYYY"),
+        created_date: Optional[str] = Form(None),
         created_by: Optional[str] = Form(None),
-        filed_date: Optional[str] = Form(None, description="DD/MM/YYYY"),
+        filed_date: Optional[str] = Form(None),
         filed_by: Optional[str] = Form(None),
         file: Optional[UploadFile] = File(None, description="File to upload"),
-        current_user: str = Form(description="User who is updating the document"),
         gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
 ):
-    """Update a document with optional file upload to GridFS"""
+    """
+    Update a document with optional file upload to GridFS
+    - For admin users, all fields are required.
+    - For normal users, only title, document_type_id, and department_id are required.
+    - The file is optional and can be uploaded in various formats (PDF, DOCX, TXT, JPEG, PNG).
+    """
     try:
-        # Determine update schema based on user role
-        is_admin = await AdminService().is_admin(current_user)
-        print(f"User {current_user} is admin: {is_admin}")
-        update_data = DocumentUpdateAdmin(
-            title=title,
-            document_type_id=document_type_id,
-            department_id=department_id,
-            status=doc_status,
-            created_date=created_date,
-            created_by=created_by,
-            filed_date=filed_date,
-            filed_by=filed_by,
-            current_user=current_user
-        ) if is_admin else DocumentUpdateNormal(
-            title=title,
-            document_type_id=document_type_id,
-            department_id=department_id,
-            current_user=current_user
-        )
+        is_admin = current_user_data.is_admin
+        if is_admin:
+            update_data = DocumentUpdateAdmin(
+                doc_id=doc_id,
+                title=title,
+                document_type_id=PyObjectId(document_type_id),
+                department_id=PyObjectId(department_id),
+                status=doc_status,
+                created_date=created_date,
+                created_by=created_by,
+                filed_date=filed_date,
+                filed_by=filed_by
+            )
+        else:
+            update_data = DocumentUpdateNormal(
+                doc_id=doc_id,
+                title=title,
+                document_type_id=PyObjectId(document_type_id),
+                department_id=PyObjectId(department_id),
+            )
 
         # Handle file upload
         file_id = None
-        
+
         if file:
             # IMAGE ALLOWED
             allowed_types = [
@@ -145,7 +152,7 @@ async def update_document(
                 raise HTTPException(status_code=500, detail=f"GridFS upload failed: {str(e)}")
 
         try:
-            updated_doc = await DocumentController.update_document(doc_id, update_data)
+            updated_doc = await DocumentController.update_document(update_data, current_user_data)
             return updated_doc
         except Exception as e:
             if file_id:
@@ -157,81 +164,26 @@ async def update_document(
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
 async def delete_document(
-        document_delete: DocumentDelete,
-        document_id: PyObjectId = Path(..., title="Document ID", description="The ObjectId of the document")
+        document_id: PyObjectId = Path(..., title="Document ID", description="The ObjectId of the document"),
+        current_user: AuthInAdminDB = Depends(get_current_user_from_header)
 ) -> dict:
     try:
-        return await DocumentController.delete_document(document_id, document_delete)
+        return await DocumentController.delete_document(document_id, current_user)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
 @router.post("/bulk-delete", status_code=status.HTTP_200_OK)
-async def bulk_delete_documents(bulk_delete: BulkDeleteRequest):
+async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB = Depends(get_current_user_from_header)):
     try:
-        return await DocumentController.bulk_delete_documents(bulk_delete)
+        return await DocumentController.bulk_delete_documents(bulk_delete, current_user_data)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/bulk-update-status", status_code=status.HTTP_200_OK)
-async def bulk_update_status(bulk_update: BulkUpdateStatusRequest):
+async def bulk_update_status(bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB = Depends(get_current_user_from_header)):
     try:
-        return await DocumentController.bulk_update_status(bulk_update)
+        return await DocumentController.bulk_update_status(bulk_update, current_user_data)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-
-from bson.errors import InvalidId
-from fastapi.responses import StreamingResponse
-
-class AsyncIteratorWrapper:
-    def __init__(self, stream):
-        self.stream = stream
-
-    async def __aiter__(self):
-        while True:
-            chunk = await self.stream.read(8192)
-            if not chunk:
-                break
-            yield chunk
-
-@router.get("/download/{file_id}")
-async def download_document(
-    file_id: str,
-    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
-):
-    """Download a document from GridFS by file_id"""
-    try:
-        # Validate ObjectId
-        try:
-            file_obj_id = PyObjectId(file_id)
-        except (InvalidId, ValueError):
-            raise HTTPException(status_code=400, detail="Invalid file ID format")
-
-        # Attempt to get the GridFS file
-        try:
-            gridfs_file = await gridfs_bucket.open_download_stream(file_obj_id)
-        except Exception:
-            raise HTTPException(status_code=404, detail="File not found in GridFS")
-
-        # Get metadata and filename
-        content_type = gridfs_file.metadata.get("content_type", "application/octet-stream") if gridfs_file.metadata else "application/octet-stream"
-        filename = gridfs_file.filename or "document"
-
-        # Ensure correct extension
-        extension = mimetypes.guess_extension(content_type) or ""
-        if extension and not filename.endswith(extension):
-            filename += extension
-
-        return StreamingResponse(
-            AsyncIteratorWrapper(gridfs_file),
-            media_type=content_type,
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
-            }
-        )
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")

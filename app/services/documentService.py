@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
+from app.schema.admin import AuthInAdminDB
 from app.schema.base import PyObjectId
 from app.services.adminService import AdminService
 from app.database import MongoDB
@@ -100,91 +101,92 @@ class DocumentService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 detail=f"Failed to create document: {str(e)}")
 
-    async def update_document(self, document_id: str,
-                              update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin]) -> DocumentResponse:
-        """Update a document based on user role"""
+    async def update_document(
+        self,
+        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
+        current_user_data: AuthInAdminDB
+    ) -> DocumentResponse:
+        """Update a document based on user role."""
         try:
+            document_id = str(update_data.doc_id)
+            username = current_user_data.username
+            is_admin = current_user_data.is_admin
+
+            # Retrieve existing document
             document = await self.get_collection().find_one({"_id": ObjectId(document_id)})
             if not document:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+                raise HTTPException(status_code=404, detail="Document not found")
 
-            username = update_data.current_user
-            is_admin = await AdminService().is_admin(username)
-
+            # Normal user must own the document
             if not is_admin and (not username or not await self.is_your_document(document_id, username)):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                    detail="You are not allowed to update this document")
+                raise HTTPException(status_code=403, detail="You are not allowed to update this document")
 
-            update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
-
+            # Prepare update fields
+            update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
+            update_fields.pop("doc_id", None)
+            if not update_fields.get("created_date") or update_fields["created_date"] == "":
+                update_fields["created_date"] = datetime.now()
+            # Admin-specific logic
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
-                if update_dict.get("status") == "Filed":
-                    update_dict["filed_by"] = username or document.get("filed_by")
-                    update_dict["filed_date"] = datetime.now()
-                    update_dict["created_date"] = document.get("created_date", datetime.now())
-                    update_dict["filed_date"] = document.get("filed_date", datetime.now())
-                elif update_dict.get("status") == "Not Filed":
-                    update_dict["filed_by"] = None
-                    update_dict["filed_date"] = None
-                elif update_dict.get("status") == "Suspended":
-                    update_dict["filed_by"] = None
-                    update_dict["filed_date"] = None
-                else:
-                    pass
+
+                if update_fields.get("status") == "Filed":
+                    update_fields["filed_by"] = username
+                    update_fields["filed_date"] = datetime.now()
+                elif update_fields.get("status") in ["Not Filed", "Suspended"]:
+                    update_fields["filed_by"] = None
+                    update_fields["filed_date"] = None
             else:
-                if not isinstance(update_dict, DocumentUpdateNormal):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                        detail="Admin fields not allowed to updatefor normal users")
-                allowed_fields = {"title", "document_type_id", "department_id", "current_user", "file_id"}
-                if any(field not in allowed_fields for field in update_dict):
+                if not isinstance(update_data, DocumentUpdateNormal):
+                    raise HTTPException(status_code=403, detail="Admin fields not allowed for normal users")
+                allowed_fields = {"title", "document_type_id", "department_id", "file_id"}
+                if any(field not in allowed_fields for field in update_fields):
                     raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Normal users can only update title, document_type_id, department_id, and file_id",
+                        status_code=403,
+                        detail="Normal users can only update title, document_type_id, department_id, and file_id"
                     )
 
-            # Handle file_id update
-            if "file_id" in update_dict and update_dict["file_id"] != document.get("file_id"):
+            # GridFS: delete old file if replacing
+            if "file_id" in update_fields and update_fields["file_id"] != document.get("file_id"):
                 if document.get("file_id"):
                     try:
                         await self.gridfs_bucket.delete(ObjectId(document["file_id"]))
                     except Exception as e:
                         print(f"Warning: Failed to delete old GridFS file {document['file_id']}: {str(e)}")
 
-            # Validate department_id and document_type_id
-            if "document_type_id" in update_dict or "department_id" in update_dict:
-                dept_id = PyObjectId(update_dict.get("department_id", document["department_id"]))
-                doc_type_id = PyObjectId(update_dict.get("document_type_id", document["document_type_id"]))
+            # Department/Document type validation
+            if "document_type_id" in update_fields or "department_id" in update_fields:
+                dept_id = PyObjectId(update_fields.get("department_id", document["department_id"]))
+                doc_type_id = PyObjectId(update_fields.get("document_type_id", document["document_type_id"]))
                 dept_check = await MongoDB.get_database()["departments"].find_one({
                     "_id": dept_id,
                     "document_types._id": doc_type_id
                 })
                 if not dept_check:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                        detail="Invalid department_id or document_type_id")
+                    raise HTTPException(status_code=400, detail="Invalid department_id or document_type_id")
 
-            if "document_type_id" in update_dict:
-                update_dict["document_type_id"] = ObjectId(update_dict["document_type_id"])
-            if "department_id" in update_dict:
-                update_dict["department_id"] = ObjectId(update_dict["department_id"])
+            # Convert to ObjectId before update
+            if "document_type_id" in update_fields:
+                update_fields["document_type_id"] = ObjectId(update_fields["document_type_id"])
+            if "department_id" in update_fields:
+                update_fields["department_id"] = ObjectId(update_fields["department_id"])
 
-            update_dict.pop("current_user", None)
-            print("Update dictionary:", update_dict)
-            if update_dict:
-                result = await self.get_collection().update_one(
-                    {"_id": ObjectId(document_id)},
-                    {"$set": update_dict},
-                )
-                if result.modified_count == 0:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No changes applied")
+            # Final update using find_one_and_update
+            updated_document = await self.get_collection().find_one_and_update(
+                {"_id": ObjectId(document_id)},
+                {"$set": update_fields},
+                return_document=True  # Motor uses `True` instead of `ReturnDocument.AFTER`
+            )
 
-            updated_document = await self.get_collection().find_one({"_id": ObjectId(document_id)})
-            return DocumentResponse(**updated_document)
+            if not updated_document:
+                raise HTTPException(status_code=400, detail="Update failed or no changes made")
+
+            print("Update fields:", update_fields)
+            return DocumentInDB(**updated_document)
+
         except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                detail=f"Failed to update document: {str(e)}")
-
+            raise HTTPException(status_code=500, detail=f"Failed to update document: {str(e)}")
     async def get_documents(self) -> List[DocumentInDB]:
         """Retrieve all documents"""
         try:
@@ -322,48 +324,49 @@ class DocumentService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 detail=f"Failed to delete document: {str(e)}")
 
-    async def bulk_delete_documents(self, bulk_delete: BulkDeleteRequest) -> dict:
-        """Bulk delete documents (admin only)"""
-        try:
-            is_admin = await AdminService().is_admin(bulk_delete.current_user)
-            if not is_admin:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only admins can perform bulk delete operations"
-                )
+  
+    async def bulk_delete_documents(self, bulk_delete: BulkDeleteRequest , current_user_data: AuthInAdminDB) -> dict:
+            """Bulk delete documents (admin only)"""
+            try:
+                is_admin = current_user_data.is_admin
+                if not is_admin:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Only admins can perform bulk delete operations"
+                    )
 
-            document_ids = [ObjectId(doc_id) for doc_id in bulk_delete.document_ids]
-            documents = await self.get_collection().find({"_id": {"$in": document_ids}}).to_list(
-                length=len(document_ids))
-            if len(documents) != len(document_ids):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="One or more documents not found"
-                )
+                document_ids = [ObjectId(doc_id) for doc_id in bulk_delete.document_ids]
+                documents = await self.get_collection().find({"_id": {"$in": document_ids}}).to_list(
+                    length=len(document_ids))
+                if len(documents) != len(document_ids):
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="One or more documents not found"
+                    )
 
-            # Delete GridFS files
-            for doc in documents:
-                if doc.get("file_id"):
-                    try:
-                        await self.gridfs_bucket.delete(ObjectId(doc["file_id"]))
-                    except Exception as e:
-                        print(f"Warning: Failed to delete GridFS file {doc['file_id']}: {str(e)}")
+                # Delete GridFS files
+                for doc in documents:
+                    if doc.get("file_id"):
+                        try:
+                            await self.gridfs_bucket.delete(ObjectId(doc["file_id"]))
+                        except Exception as e:
+                            print(f"Warning: Failed to delete GridFS file {doc['file_id']}: {str(e)}")
 
-            result = await self.get_collection().delete_many({"_id": {"$in": document_ids}})
-            return {
-                "message": f"Successfully deleted {result.deleted_count} documents",
-                "deleted_count": result.deleted_count
-            }
-        except ValueError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                detail=f"Failed to bulk delete documents: {str(e)}")
+                result = await self.get_collection().delete_many({"_id": {"$in": document_ids}})
+                return {
+                    "message": f"Successfully deleted {result.deleted_count} documents",
+                    "deleted_count": result.deleted_count
+                }
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                    detail=f"Failed to bulk delete documents: {str(e)}")
 
-    async def bulk_update_status(self, bulk_update: BulkUpdateStatusRequest) -> dict:
+    async def bulk_update_status(self, bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB) -> dict:
         """Bulk update document statuses (admin only)"""
         try:
-            is_admin = await AdminService().is_admin(bulk_update.current_user)
+            is_admin = current_user_data.is_admin
             if not is_admin:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -387,7 +390,7 @@ class DocumentService:
 
             update_data = {
                 "status": bulk_update.status,
-                "filed_by": bulk_update.current_user if bulk_update.status == "Filed" else None,
+                "filed_by": current_user_data.username if bulk_update.status == "Filed" else None,
                 "filed_date": datetime.now() if bulk_update.status == "Filed" else None
             }
 
@@ -405,7 +408,6 @@ class DocumentService:
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 detail=f"Failed to bulk update documents: {str(e)}")
-
     async def is_your_document(self, doc_id: str, username: str) -> bool:
         """Check if the document was created by the given username"""
         try:

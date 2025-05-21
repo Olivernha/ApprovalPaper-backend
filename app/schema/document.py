@@ -1,10 +1,12 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from fastapi import Form
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 from .base import PyObjectId
 
 class Document(BaseModel):
+    
     """Base class for document models."""
     class Config:
         populate_by_name = True
@@ -57,33 +59,39 @@ class DocumentInDB(Document):
         json_encoders = {PyObjectId: str, datetime: lambda dt: dt.isoformat()}
 
 class DocumentUpdateNormal(BaseModel):
-    """Schema for normal user document update."""
-    title: Optional[str] = Field(None, min_length=1, description="Document title")
-    department_id: Optional[PyObjectId] = Field(None, description="Reference to Department ID")
-    document_type_id: Optional[PyObjectId] = Field(None, description="Reference to DocumentType ID")
-    current_user: Optional[str] = Field(None, description="Current user making the update")
-    file_id: Optional[str] = Field(None, description="GridFS file ID for the uploaded document")
+    doc_id: PyObjectId = Form(..., description="Document ID to update")
+    title: Optional[str] = Form(None, min_length=1, description="Document title")
+    department_id: Optional[PyObjectId] = Form(None, description="Reference to Department ID")
+    document_type_id: Optional[PyObjectId] = Form(None, description="Reference to DocumentType ID")
+    file_id: Optional[str] = Form(None, description="GridFS file ID for the uploaded document")
+
     class Config:
         json_schema_extra = {
             "example": {
+                "doc_id": "682440853d6cd156e5585927",
                 "title": "Updated Tender Proposal",
                 "document_type_id": "6825af3e13ad6fad9efe7d1d",
-                "current_user": "helloworld",
                 "department_id": "682440853d6cd156e5585927",
             }
         }
 
+# Extended Form class for admins
 class DocumentUpdateAdmin(DocumentUpdateNormal):
-    """Schema for admin document update."""
-    created_date: Optional[str] = Field(None, description="Creation date of the document")
-    created_by: Optional[str] = Field(None, min_length=1, description="User who created the document")
-    filed_date: Optional[str] = Field(None, description="Filing date of the document")
-    filed_by: Optional[str] = Field(None, description="User who filed the document")
-    status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-    file_id: Optional[str] = Field(None, description="GridFS file ID for the uploaded document")
+    doc_id: PyObjectId = Field(..., description="Document ID to update")
+    created_date: Optional[str] = Form(None, description="Creation date of the document")
+    created_by: Optional[str] = Form(None, min_length=1, description="User who created the document")
+    filed_date: Optional[str] = Form(None, description="Filing date of the document")
+    filed_by: Optional[str] = Form(None, min_length=1, description="User who filed the document")
+    status: Optional[str] = Form(
+        None,
+        description="Document status",
+        pattern="^(Not Filed|Filed|Suspended)$"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
+                "doc_id": "682440853d6cd156e5585927",
                 "title": "Updated Tender Proposal",
                 "document_type_id": "6825af3e13ad6fad9efe7d1d",
                 "created_date": "25/02/2026",
@@ -91,14 +99,23 @@ class DocumentUpdateAdmin(DocumentUpdateNormal):
                 "filed_date": "26/03/2026",
                 "filed_by": "nay",
                 "status": "Filed",
-                "current_user": "admin_user"
             }
         }
-
-class DocumentDelete(BaseModel):
-    """Schema for deleting a document."""
-    current_user: str = Field(..., description="User who is deleting the document")
-
+class BulkDeleteRequest(BaseModel):
+    """Schema for bulk deleting documents."""
+    document_ids: List[PyObjectId] = Field(..., description="List of document IDs to delete")
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {PyObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "document_ids": [
+                    "66488b368a6801e71d70dfe9",
+                    "66488b368a6801e71d70dfea"
+                ]
+            }
+        }
 class DocumentResponse(DocumentInDB):
     """Schema for API responses."""
     pass
@@ -140,29 +157,10 @@ class DocumentPaginationResponse(BaseModel):
             }
         }
 
-class BulkDeleteRequest(BaseModel):
-    """Schema for bulk deleting documents."""
-    document_ids: List[PyObjectId] = Field(..., description="List of document IDs to delete")
-    current_user: str = Field(..., description="Admin user performing the bulk delete")
-    class Config:
-        populate_by_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {PyObjectId: str}
-        json_schema_extra = {
-            "example": {
-                "document_ids": [
-                    "66488b368a6801e71d70dfe9",
-                    "66488b368a6801e71d70dfea"
-                ],
-                "current_user": "admin_user"
-            }
-        }
-
 class BulkUpdateStatusRequest(BaseModel):
     """Schema for bulk updating document statuses."""
     document_ids: List[PyObjectId] = Field(..., description="List of document IDs to update")
     status: str = Field(..., description="New status for documents", pattern="^(Not Filed|Filed|Suspended)$")
-    current_user: str = Field(..., description="Admin user performing the bulk update")
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -173,7 +171,6 @@ class BulkUpdateStatusRequest(BaseModel):
                     "66488b368a6801e71d70dfe9",
                     "66488b368a6801e71d70dfea"
                 ],
-                "status": "Filed",
-                "current_user": "admin_user"
+                "status": "Filed"
             }
         }
