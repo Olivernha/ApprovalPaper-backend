@@ -1,4 +1,4 @@
-from typing import List
+from typing import  List
 from app.services.department import DepartmentService
 from app.schemas.department import DepartmentCreate, DepartmentInDB, DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
 from app.core.exceptions import handle_service_exception
@@ -13,6 +13,11 @@ class DepartmentController:
     @staticmethod
     async def create_department(department: DepartmentCreate) -> DepartmentInDB:
         return await DepartmentService().create_department(department)
+
+    @staticmethod
+    async def delete_document_type(department_id: str, document_type_id: str) -> None:
+        await DepartmentService().delete_document_type(department_id, document_type_id)
+        
 
     @staticmethod
     async def add_document_type(department_id: str, document_type: DocumentTypeCreate) -> DepartmentInDB:

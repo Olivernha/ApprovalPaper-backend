@@ -66,13 +66,15 @@ async def seed_departments() -> List[Dict]:
                 "_id": ObjectId(),
                 "name": document_type_templates[i],
                 "prefix": f"{dept_name[:3].upper()}-{document_type_templates[i][:4].upper()}",
-                "padding": 4
+                "padding": 4,
+                "created_date": fake.date_time_this_decade().isoformat()
             }
         ]
         departments.append({
             "_id": ObjectId(),
             "name": dept_name,
-            "document_types": doc_types
+            "document_types": doc_types,
+            "created_date": fake.date_time_this_decade().isoformat()
         })
 
     await db["departments"].delete_many({})
@@ -82,7 +84,6 @@ async def seed_departments() -> List[Dict]:
     return departments
 
 async def seed_documents(departments: List[Dict], users: List[Dict]) -> None:
-    """Seed 100 documents without attaching dummy PDF files"""
     db = MongoDB.get_database()
     usernames = [user["username"] for user in users]
     document_service = DocumentService()

@@ -1,12 +1,15 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from app.schemas.admin import AuthInAdminDB
 from app.services.admin import AdminService
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def get_current_user_from_header() -> AuthInAdminDB:
-    username = "hbake1r"  # Replace with actual header extraction in production
+async def get_current_user_from_header(request :Request) -> AuthInAdminDB:
+        
+
+    # username = request.headers.get("X-User-Name")
+    username = "longgordon"  
     if not username:
         logger.warning("No username provided in X-User-Name header")
         raise HTTPException(

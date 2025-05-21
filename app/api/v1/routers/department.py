@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Path, status
-from typing import List
+from typing import Dict, List
 from app.api.v1.controllers.department import DepartmentController
 from app.schemas.base import PyObjectId
 from app.schemas.department import DepartmentCreate, DepartmentResponse, DocumentTypeCreate, DocumentTypeInDB, DocumentTypeWithDepartment
@@ -17,6 +17,13 @@ async def get_departments():
 @router.post("/create", status_code=status.HTTP_201_CREATED, response_model=DepartmentResponse)
 async def create_department(department: DepartmentCreate):
     return await DepartmentController.create_department(department)
+
+@router.delete("/{department_id}/document-types/{document_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document_type(
+    department_id: PyObjectId = Path(..., title="Department ID", description="The ObjectId of the department"),
+    document_type_id: PyObjectId = Path(..., title="Document Type ID", description="The ObjectId of the document type")
+) :
+    return await DepartmentController.delete_document_type(department_id, document_type_id)
 
 @router.post("/{department_id}/document-type", status_code=status.HTTP_201_CREATED, response_model=DepartmentResponse)
 async def add_document_type(

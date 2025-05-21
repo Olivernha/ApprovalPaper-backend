@@ -1,10 +1,11 @@
+from datetime import datetime
 from fastapi import HTTPException, status
 from bson import ObjectId
-from typing import List
+from typing import Dict, List
 
 from app.core.database import MongoDB
 from app.models.department import DepartmentModel
-from app.schemas.department import DepartmentCreate, DepartmentInDB, DocumentTypeCreate, DocumentTypeInDB, DepartmentBase, DocumentTypeWithDepartment
+from app.schemas.department import DepartmentCreate, DepartmentInDB, DepartmentInDBMinimal, DocumentTypeCreate, DocumentTypeInDB,  DocumentTypeWithDepartment
 from app.services.utils import validate_document_types
 from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
@@ -42,14 +43,36 @@ class DepartmentService:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type prefix already exists")
 
             doc_types_with_ids = [
-                {**doc.model_dump(), "_id": ObjectId()} for doc in department_data.document_types
+                {**doc.model_dump(), "_id": ObjectId() , "created_date": str(datetime.now())} for doc in department_data.document_types
             ]
             department_dict = department_data.model_dump()
             department_dict["document_types"] = doc_types_with_ids
 
+            department_dict["created_date"] = str(datetime.now())
+
             result = await self.get_collection().insert_one(department_dict)
             department_dict["_id"] = result.inserted_id
             return DepartmentInDB(**department_dict)
+        except Exception as e:
+            handle_service_exception(e)
+    from fastapi import HTTPException, status
+
+    async def delete_document_type(self, department_id: str, document_type_id: str) -> dict:
+        try:
+            department_oid = to_object_id(department_id)
+            document_type_oid = to_object_id(document_type_id)
+            
+            department = await self.get_collection().find_one({"_id": department_oid})
+            if not department:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+            
+            if document_type_oid not in [doc["_id"] for doc in department.get("document_types", [])]:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document type not found")
+            
+            await self.get_collection().update_one(
+                {"_id": department_oid},
+                {"$pull": {"document_types": {"_id": document_type_oid}}}
+            )
         except Exception as e:
             handle_service_exception(e)
 
@@ -73,6 +96,7 @@ class DepartmentService:
 
             doc_type_dict = doc_type.model_dump()
             doc_type_dict["_id"] = ObjectId()
+            doc_type_dict["created_date"] = str(datetime.now())
             await self.get_collection().update_one(
                 {"_id": department_id},
                 {"$push": {"document_types": doc_type_dict}}
@@ -98,7 +122,7 @@ class DepartmentService:
             departments = await self.get_collection().find().to_list(length=None)
             all_doc_types = []
             for dept in departments:
-                department = DepartmentBase(**dept)
+                department = DepartmentInDBMinimal(**dept)
                 doc_types = dept.get("document_types", [])
                 for doc_type in doc_types:
                     doc_type_with_dept = DocumentTypeWithDepartment(
