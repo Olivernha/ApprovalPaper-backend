@@ -1,0 +1,56 @@
+from typing import List, Union
+from app.services.document import DocumentService
+from app.schemas.document import (
+    BulkDeleteRequest,
+    BulkUpdateStatusRequest,
+    DocumentCreate,
+    DocumentInDB,
+    DocumentPaginationResponse,
+    DocumentUpdateNormal,
+    DocumentUpdateAdmin,
+)
+from app.schemas.admin import AuthInAdminDB
+
+class DocumentController:
+    @staticmethod
+    async def get_documents() -> List[DocumentInDB]:
+        return await DocumentService().get_documents()
+
+    @staticmethod
+    async def get_documents_paginated(
+        page: int,
+        limit: int,
+        search: str | None,
+        status_filter: str | None,
+        department_id: str | None,
+        document_type_id: str | None,
+        sort_field: str,
+        sort_order: int
+    ) -> DocumentPaginationResponse:
+        return await DocumentService().get_documents_paginated(
+            page, limit, search, status_filter, department_id, document_type_id, sort_field, sort_order
+        )
+
+    @staticmethod
+    async def create_document(document: DocumentCreate, current_user: AuthInAdminDB) -> DocumentInDB:
+        document.created_by = current_user.username
+        return await DocumentService().create_document(document)
+
+    @staticmethod
+    async def update_document(
+        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
+        current_user_data: AuthInAdminDB
+    ) -> DocumentInDB:
+        return await DocumentService().update_document(update_data, current_user_data)
+
+    @staticmethod
+    async def delete_document(document_id: str, current_user: AuthInAdminDB) -> dict:
+        return await DocumentService().delete_document(document_id, current_user.username)
+
+    @staticmethod
+    async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:
+        return await DocumentService().bulk_delete_documents(bulk_delete, current_user_data)
+
+    @staticmethod
+    async def bulk_update_status(bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB) -> dict:
+        return await DocumentService().bulk_update_status(bulk_update, current_user_data)
