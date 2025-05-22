@@ -1,6 +1,9 @@
 from fastapi import HTTPException, status
 from typing import List, Optional
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from app.core.database import MongoDB
 from app.schemas.department import DocumentTypeCreate
+from app.core.config import settings  # Import settings from the appropriate module
 
 def validate_document_types(new_doc_types: List[DocumentTypeCreate], existing_doc_types: Optional[List[dict]] = None) -> None:
     """Validate document types for uniqueness of names and prefixes."""
@@ -21,3 +24,4 @@ def validate_document_types(new_doc_types: List[DocumentTypeCreate], existing_do
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type name already exists in department")
     if any(prefix in existing_prefixes for prefix in doc_type_prefixes):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type prefix already exists in department")
+    

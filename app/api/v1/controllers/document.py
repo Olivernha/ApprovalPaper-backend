@@ -1,5 +1,10 @@
 from typing import List, Union
+from fastapi import Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
+from app.core.dependencies.auth import get_current_user_from_header
+from app.schemas.base import PyObjectId
 from app.services.document import DocumentService
 from app.schemas.document import (
     BulkDeleteRequest,
@@ -11,6 +16,7 @@ from app.schemas.document import (
     DocumentUpdateAdmin,
 )
 from app.schemas.admin import AuthInAdminDB
+
 
 class DocumentController:
     @staticmethod
@@ -58,3 +64,12 @@ class DocumentController:
     @staticmethod
     async def bulk_update_status(bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB) -> dict:
         return await DocumentService().bulk_update_status(bulk_update, current_user_data)
+    
+
+    async def download_document(
+        document_id: str,
+        current_user: AuthInAdminDB,
+        gridfs_bucket: AsyncIOMotorGridFSBucket,
+    ) -> StreamingResponse:
+        print(current_user.username)
+        return await DocumentService().download_document(document_id, gridfs_bucket, current_user)

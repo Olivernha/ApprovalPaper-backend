@@ -1,8 +1,12 @@
 from datetime import datetime
+import mimetypes
 from typing import List, Union, Dict, Any, Optional
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from app.core.utils import AsyncIteratorWrapper 
+from app.core.config import settings  # Import settings from the appropriate module
 
 from app.core.database import MongoDB
 from app.models.document import DocumentModel
@@ -22,6 +26,7 @@ from app.core.exceptions import handle_service_exception
 from app.services.admin import AdminService
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 class DocumentService:
@@ -32,6 +37,8 @@ class DocumentService:
     def get_collection(self):
         collection = MongoDB.get_database()[self.collection_name]
         return collection
+    def get_file_collection(self, collection_name: str):
+        return MongoDB.get_database()[f"{collection_name}"]
 
     async def get_document_by_id(self, document_id: str) -> DocumentInDB:
         try:
@@ -433,3 +440,88 @@ class DocumentService:
             return inserted_docs
         except Exception as e:
             handle_service_exception(e)
+
+    async def download_document(self, document_id: str,  gridfs_bucket: AsyncIOMotorGridFSBucket ,current_user: AuthInAdminDB):
+        try:
+            document = await self.get_document_by_id(document_id)
+            if not document:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+            if not document.file_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file associated with this document")
+
+            is_admin = current_user.is_admin
+            if not is_admin and not await self.is_your_document(document_id, current_user.username):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to download this document")
+
+            file_id = to_object_id(document.file_id)
+            files_collection_name = f"{settings.GRIDFS_BUCKET_NAME}.files"
+            file_info = await self.get_file_collection(files_collection_name).find_one({"_id": file_id})
+            if not file_info:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in GridFS")
+
+            gridfs_file = await gridfs_bucket.open_download_stream(file_id)
+
+            content_type = (
+                gridfs_file.metadata.get("content_type", "application/octet-stream")
+                if gridfs_file.metadata else "application/octet-stream"
+            )
+            filename = gridfs_file.filename or "document"
+            extension = mimetypes.guess_extension(content_type) or ""
+            if extension and not filename.lower().endswith(extension.lower()):
+                filename += extension
+
+            filename = filename.replace("\n", "").replace("\r", "").replace(";", "")
+
+            return StreamingResponse(
+                AsyncIteratorWrapper(gridfs_file),
+                media_type=content_type,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Length": str(gridfs_file.length)
+                }
+            )
+        except Exception as e:
+            handle_service_exception(e)
+#    try:
+#         if not ObjectId.is_valid(file_id):
+#             raise HTTPException(status_code=400, detail="Invalid file_id format")
+
+#         file_obj_id = ObjectId(file_id)
+
+#         # Use <bucket>.files collection to check metadata
+#         files_collection_name = f"{settings.GRIDFS_BUCKET_NAME}.files"
+#         file_info = await db[files_collection_name].find_one({"_id": file_obj_id})
+#         if not file_info:
+#             raise HTTPException(status_code=404, detail="File not found")
+
+#         # Auth check
+#         if not current_user_data.is_admin and file_info["metadata"]["uploaded_by"] != current_user_data.username:
+#             raise HTTPException(status_code=403, detail="You are not authorized to download this file")
+
+#         # Proceed with file download
+#         gridfs_file = await gridfs_bucket.open_download_stream(file_obj_id)
+
+#         content_type = (
+#             gridfs_file.metadata.get("content_type", "application/octet-stream")
+#             if gridfs_file.metadata else "application/octet-stream"
+#         )
+#         filename = gridfs_file.filename or "document"
+#         extension = mimetypes.guess_extension(content_type) or ""
+#         if extension and not filename.lower().endswith(extension.lower()):
+#             filename += extension
+
+#         filename = filename.replace("\n", "").replace("\r", "").replace(";", "")
+
+#         return StreamingResponse(
+#             AsyncIteratorWrapper(gridfs_file),
+#             media_type=content_type,
+#             headers={
+#                 "Content-Disposition": f'attachment; filename="{filename}"',
+#                 "Content-Length": str(gridfs_file.length)
+#             }
+#         )
+
+#     except HTTPException as http_exc:
+#         raise http_exc
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
