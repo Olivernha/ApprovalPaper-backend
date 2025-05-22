@@ -43,12 +43,12 @@ class DepartmentService:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type prefix already exists")
 
             doc_types_with_ids = [
-                {**doc.model_dump(), "_id": ObjectId() , "created_date": str(datetime.now())} for doc in department_data.document_types
+                {**doc.model_dump(), "_id": ObjectId() , "created_date": datetime.now()} for doc in department_data.document_types
             ]
             department_dict = department_data.model_dump()
             department_dict["document_types"] = doc_types_with_ids
 
-            department_dict["created_date"] = str(datetime.now())
+            department_dict["created_date"] = datetime.now()
 
             result = await self.get_collection().insert_one(department_dict)
             department_dict["_id"] = result.inserted_id
@@ -96,7 +96,7 @@ class DepartmentService:
 
             doc_type_dict = doc_type.model_dump()
             doc_type_dict["_id"] = ObjectId()
-            doc_type_dict["created_date"] = str(datetime.now())
+            doc_type_dict["created_date"] = datetime.now()
             await self.get_collection().update_one(
                 {"_id": department_id},
                 {"$push": {"document_types": doc_type_dict}}

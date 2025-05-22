@@ -1,4 +1,6 @@
 from typing import List
+
+from fastapi import HTTPException
 from app.services.admin import AdminService
 from app.schemas.admin import AdminUser
 from app.core.exceptions import handle_service_exception

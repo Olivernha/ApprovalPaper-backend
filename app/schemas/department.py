@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.base import PyObjectId
@@ -5,11 +6,11 @@ from app.schemas.base import PyObjectId
 
 class DepartmentBase(BaseModel):
     name: str = Field(..., min_length=1, description="Unique department name")
-    created_date: Optional[str] = Field(None, description="Creation date")
+    created_date: Optional[datetime] = Field(None, description="Creation date")
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={PyObjectId: str},
+        json_encoders={PyObjectId: str, datetime: lambda dt: dt.isoformat()},
         json_schema_extra={"example": {"name": "Finance"}}
     )
 
@@ -20,11 +21,11 @@ class DepartmentInDBMinimal(DepartmentBase):
 class DocumentType(BaseModel):
     name: str = Field(..., description="Name of the document type")
     prefix: str = Field(..., description="Prefix for document numbering")
-    created_date: Optional[str] = Field(None, description="Creation date ")
+    created_date: Optional[datetime] = Field(None, description="Creation date ")
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={PyObjectId: str},
+        json_encoders={PyObjectId: str, datetime: lambda dt: dt.isoformat()},
         json_schema_extra={"example": {"name": "Invoice", "prefix": "INV"}}
     )
 
@@ -46,7 +47,7 @@ class DepartmentCreate(DepartmentBase):
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={PyObjectId: str},
+        json_encoders={PyObjectId: str, datetime: lambda dt: dt.isoformat()},
         json_schema_extra={
             "example": {
                 "name": "Finance",

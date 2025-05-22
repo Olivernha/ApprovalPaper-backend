@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi import APIRouter, Path, Query, Form, File, UploadFile, Depends, HTTPException, status
 from typing import List, Optional
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
@@ -57,6 +56,9 @@ async def get_documents_paginated(
         sort_field=sort_field,
         sort_order=sort_order
     )
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(document_id: str = Path(..., title="Document ID", description="The ObjectId of the document")):
+    return await DocumentController.get_document_by_id(document_id)
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DocumentResponse)
 async def create_document(document: DocumentCreate, current_user: AuthInAdminDB = Depends(get_current_user_from_header)):
@@ -79,16 +81,6 @@ async def update_document(
 ):
     is_admin = current_user_data.is_admin
     if is_admin:
-        if created_date:
-            try:
-                created_date = datetime.fromisoformat(created_date)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid created_date format")
-        if filed_date:
-            try:
-                filed_date = datetime.fromisoformat(filed_date)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filed_date format")
         update_data = DocumentUpdateAdmin(
             doc_id=doc_id,
             title=title,

@@ -67,14 +67,14 @@ async def seed_departments() -> List[Dict]:
                 "name": document_type_templates[i],
                 "prefix": f"{dept_name[:3].upper()}-{document_type_templates[i][:4].upper()}",
                 "padding": 4,
-                "created_date": fake.date_time_this_decade().isoformat()
+                "created_date":  fake.date_time_this_decade()
             }
         ]
         departments.append({
             "_id": ObjectId(),
             "name": dept_name,
             "document_types": doc_types,
-            "created_date": fake.date_time_this_decade().isoformat()
+            "created_date": fake.date_time_this_decade()
         })
 
     await db["departments"].delete_many({})
@@ -89,6 +89,7 @@ async def seed_documents(departments: List[Dict], users: List[Dict]) -> None:
     document_service = DocumentService()
     docs_per_type = 5
     await db["documents"].delete_many({})
+    await db["sequence_counters"].delete_many({})
     for dept in departments:
         for doc_type in dept["document_types"]:
             for i in range(docs_per_type):

@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from app.core.database import MongoDB
 from app.models.document import DocumentModel
 from app.schemas.admin import AuthInAdminDB
+from app.schemas.base import PyObjectId
 from app.schemas.document import (
     BulkDeleteRequest,
     BulkUpdateStatusRequest,
@@ -31,6 +32,15 @@ class DocumentService:
     def get_collection(self):
         collection = MongoDB.get_database()[self.collection_name]
         return collection
+
+    async def get_document_by_id(self, document_id: str) -> DocumentInDB:
+        try:
+            document = await self.get_collection().find_one({"_id": to_object_id(document_id)})
+            if not document:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+            return DocumentInDB(**document)
+        except Exception as e:
+            handle_service_exception(e)
 
     async def create_document(self, document: DocumentCreate) -> DocumentInDB:
         try:
@@ -91,6 +101,8 @@ class DocumentService:
                 "created_by": document_data.get("created_by"),
             })
 
+            # remove field if empty
+            document_data = {k: v for k, v in document_data.items() if v is not None}
             result = await self.get_collection().insert_one(document_data)
             document_data["_id"] = result.inserted_id
             return DocumentInDB(**document_data)
@@ -116,15 +128,18 @@ class DocumentService:
 
             update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
             update_fields.pop("doc_id", None)
-            if not update_fields.get("created_date") or update_fields["created_date"] == "":
-                update_fields["created_date"] = datetime.now()
+            # if fields are empty, remove them from update_fields
+            update_fields = {k: v for k, v in update_fields.items() if v is not None}
+
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
                     update_fields["filed_by"] = username
                     update_fields["filed_date"] = datetime.now()
-                elif update_fields.get("status") in ["Not Filed", "Suspended"]:
+                elif update_fields.get("status") == "Not Filed":
                     update_fields["filed_by"] = None
                     update_fields["filed_date"] = None
+                else:
+                    update_fields["filed_by"] = username
             else:
                 if not isinstance(update_data, DocumentUpdateNormal):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin fields not allowed for normal users")

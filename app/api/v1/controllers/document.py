@@ -1,4 +1,5 @@
 from typing import List, Union
+
 from app.services.document import DocumentService
 from app.schemas.document import (
     BulkDeleteRequest,
@@ -16,6 +17,9 @@ class DocumentController:
     async def get_documents() -> List[DocumentInDB]:
         return await DocumentService().get_documents()
 
+    @staticmethod
+    async def get_document_by_id(document_id: str) -> DocumentInDB:
+        return await DocumentService().get_document_by_id(document_id)
     @staticmethod
     async def get_documents_paginated(
         page: int,

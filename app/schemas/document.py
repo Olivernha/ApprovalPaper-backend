@@ -26,7 +26,7 @@ class DocumentCreate(Document):
     title: str = Field(..., min_length=1, description="Document title")
     document_type_id: PyObjectId = Field(..., description="Reference to DocumentType ID")
     department_id: PyObjectId = Field(..., description="Reference to Department ID")
-    created_by: str = Field(..., description="User who created the document")
+    created_by: Optional[str] = Field(None, description="User who created the document")
 
     model_config = ConfigDict(
         populate_by_name=True,
