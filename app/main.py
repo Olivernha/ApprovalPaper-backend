@@ -26,10 +26,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         await UserModel.ensure_indexes()
         logger.info("Database indexes ensured")
 
-        # if settings.SEED_DATA_ON_STARTUP:
-        #     logger.info("Seeding initial data...")
-        #     await seed_data()
-        #     logger.info("Data seeding completed")
+        if settings.SEED_DATA_ON_STARTUP:
+            logger.info("Seeding initial data...")
+            await seed_data()
+            logger.info("Data seeding completed")
 
         yield
     except Exception as e:

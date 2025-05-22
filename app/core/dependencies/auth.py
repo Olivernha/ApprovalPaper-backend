@@ -7,9 +7,7 @@ logger = logging.getLogger(__name__)
 
 async def get_current_user_from_header(request :Request) -> AuthInAdminDB:
         
-
-    # username = request.headers.get("X-User-Name")
-    username = "reedmichael"  
+    username = request.headers.get("X-User-Name")
     if not username:
         logger.warning("No username provided in X-User-Name header")
         raise HTTPException(
