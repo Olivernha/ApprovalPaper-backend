@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "approval_db"
     GRIDFS_BUCKET_NAME: str = "fs"
     SEED_DATA_ON_STARTUP: bool = False
+    CORS_ORIGINS: list = ["*"]  # List of allowed origins for CORS
 
     class Config:
         env_file = ".env"

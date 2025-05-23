@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # Import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from app.core.database import MongoDB
@@ -45,6 +46,15 @@ app = FastAPI(
     version=settings.VERSION,
     description="Approval Paper Management API",
     lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,  # List of allowed origins
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
 
 app.include_router(admin.router)
