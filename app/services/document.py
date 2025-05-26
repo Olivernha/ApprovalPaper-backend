@@ -93,7 +93,7 @@ class DocumentService:
 
             padded_seq = str(counter_doc["sequence_value"]).zfill(counter_doc.get("padding", 3))
             year_suffix = str(year % 100)
-            ref_no = f"{doc_type['prefix']}/{padded_seq}/{year_suffix}"
+            ref_no = f"{doc_type['prefix']}/{year_suffix}/{padded_seq}"
 
             existing = await self.get_collection().find_one({"ref_no": ref_no})
             if existing:

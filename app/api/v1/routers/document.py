@@ -55,6 +55,7 @@ async def get_documents_paginated(
         sort_field: str = Query("created_date", description="Field to sort by"),
         sort_order: int = Query(-1, description="Sort order: 1 for ascending, -1 for descending")
 ):
+
     return await DocumentController.get_documents_paginated(
         page=page,
         limit=limit,
