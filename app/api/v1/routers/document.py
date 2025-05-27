@@ -109,7 +109,6 @@ async def update_document(
             document_type_id=document_type_id,
             department_id=department_id,
         )
-
     if file:
         update_data.file_id = await upload_file_to_gridfs(file, gridfs_bucket, current_user_data.username)
 
@@ -183,4 +182,5 @@ async def download_document(
     current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
 ) -> StreamingResponse:
+   print('Docuemnt ID'+ document_id)
    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)

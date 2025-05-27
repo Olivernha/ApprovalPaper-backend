@@ -132,7 +132,7 @@ class DocumentService:
 
             if not is_admin and not await self.is_your_document(document_id, username):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to update this document")
-
+            update_data.file_id = PyObjectId(update_data.file_id)
             update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
             update_fields.pop("doc_id", None)
             # if fields are empty, remove them from update_fields

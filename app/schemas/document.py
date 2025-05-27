@@ -53,7 +53,7 @@ class DocumentInDB(Document):
     filed_by: Optional[str] = Field(None, description="User who filed the document")
     filed_date: Optional[datetime] = Field(None, description="Filing timestamp")
     status: str = Field(default="Not Filed", description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-    file_id: Optional[str] = None
+    file_id: Optional[PyObjectId] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

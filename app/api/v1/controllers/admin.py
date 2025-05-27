@@ -23,3 +23,8 @@ class AdminController:
             return user
         except Exception as e:
             handle_service_exception(e)
+
+    @staticmethod
+    async def check_user_exists(username: str) -> bool:
+            user = await AdminService().is_admin(username)
+            return bool(user)
