@@ -66,7 +66,7 @@ class DocumentUpdateNormal(BaseModel):
     title: Optional[str] = Form(None, min_length=1, description="Document title")
     department_id: Optional[PyObjectId] = Form(None, description="Reference to Department ID")
     document_type_id: Optional[PyObjectId] = Form(None, description="Reference to DocumentType ID")
-    file_id: Optional[str] = Form(None, description="GridFS file ID for the uploaded document")
+    file_id: Optional[PyObjectId] = Form(None, description="GridFS file ID for the uploaded document")
 
     model_config = ConfigDict(
         json_schema_extra={

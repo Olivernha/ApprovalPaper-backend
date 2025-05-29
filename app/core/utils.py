@@ -1,7 +1,11 @@
+from typing import Any, Coroutine
+
 from bson import ObjectId
 from fastapi import HTTPException, status, UploadFile
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 import logging
+
+from app.schemas.base import PyObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +15,7 @@ def to_object_id(value: str) -> ObjectId:
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ObjectId format")
 
-async def upload_file_to_gridfs(file: UploadFile, gridfs_bucket: AsyncIOMotorGridFSBucket,created_by: str) -> str:
+async def upload_file_to_gridfs(file: UploadFile, gridfs_bucket: AsyncIOMotorGridFSBucket,created_by: str) -> PyObjectId:
     allowed_types = [
         "application/pdf",
         "application/msword",
@@ -36,7 +40,7 @@ async def upload_file_to_gridfs(file: UploadFile, gridfs_bucket: AsyncIOMotorGri
             source=content,
             metadata={"content_type": file.content_type , "uploaded_by": created_by},
         )
-        return str(file_id)
+        return PyObjectId(file_id)
     except Exception as e:
         logger.error(f"GridFS upload failed: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"GridFS upload failed: {str(e)}")

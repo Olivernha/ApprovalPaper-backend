@@ -73,3 +73,9 @@ class DocumentController:
     ) -> StreamingResponse:
         print(current_user.username)
         return await DocumentService().download_document(document_id, gridfs_bucket, current_user)
+
+    @staticmethod
+    async def count_docs_by_status(department_id: str):
+         """ count docs by status with department id """
+
+         return await DocumentService().count_docs_by_status(department_id)

@@ -1,11 +1,9 @@
 
-import mimetypes
-from bson import ObjectId
 from fastapi import APIRouter, Path, Query, Form, File, UploadFile, Depends, HTTPException, status
-from typing import List, Optional
+from typing import Dict, List, Optional
 from fastapi.responses import StreamingResponse
 from typing import Tuple
-from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorGridFSBucket
+from motor.motor_asyncio import  AsyncIOMotorGridFSBucket
 
 from app.api.v1.controllers.document import DocumentController
 from app.core.database import MongoDB
@@ -23,7 +21,7 @@ from app.schemas.document import (
 from app.schemas.base import PyObjectId
 from app.core.config import settings
 from app.core.utils import upload_file_to_gridfs
-
+from app.core.config import settings
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/document",
@@ -32,13 +30,14 @@ router = APIRouter(
 )
 
 
-from app.core.config import settings
+
 async def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
     db = MongoDB.get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database connection not established")
     bucket = AsyncIOMotorGridFSBucket(db, bucket_name=settings.GRIDFS_BUCKET_NAME)
     return bucket
+
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_documents():
@@ -66,6 +65,10 @@ async def get_documents_paginated(
         sort_field=sort_field,
         sort_order=sort_order
     )
+@router.get("/count_status/{department_id}", response_model=Dict[str, int])
+async def count_docs_by_status(department_id: str = Path(..., title="Department ID", description="The ObjectId of the department")):
+    return await DocumentController.count_docs_by_status(department_id)
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(document_id: str = Path(..., title="Document ID", description="The ObjectId of the document")):
     return await DocumentController.get_document_by_id(document_id)
@@ -80,6 +83,7 @@ async def update_document(
         title: Optional[str] = Form(None, min_length=1, max_length=200),
         document_type_id: Optional[PyObjectId] = Form(None),
         department_id: Optional[PyObjectId] = Form(None),
+        file_id: Optional[PyObjectId] = Form(None),
         doc_status: Optional[str] = Form(None, pattern="^(Not Filed|Filed|Suspended)$"),
         created_date: Optional[str] = Form(None),
         created_by: Optional[str] = Form(None),
@@ -100,7 +104,8 @@ async def update_document(
             created_date=created_date,
             created_by=created_by,
             filed_date=filed_date,
-            filed_by=filed_by
+            filed_by=filed_by,
+            file_id=file_id
         )
     else:
         update_data = DocumentUpdateNormal(
@@ -108,15 +113,18 @@ async def update_document(
             title=title,
             document_type_id=document_type_id,
             department_id=department_id,
+            file_id=file_id
         )
-    if file:
+    print(update_data.model_dump())
+    print(file)
+    if file is not None:
         update_data.file_id = await upload_file_to_gridfs(file, gridfs_bucket, current_user_data.username)
 
     return await DocumentController.update_document(update_data, current_user_data)
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
 async def delete_document(
-        document_id: PyObjectId = Path(..., title="Document ID", description="The ObjectId of the document"),
+        document_id: str = Path(..., title="Document ID", description="The ObjectId of the document"),
         current_user: AuthInAdminDB = Depends(get_current_user_from_header)
 ) -> dict:
     return await DocumentController.delete_document(document_id, current_user)
@@ -184,3 +192,6 @@ async def download_document(
 ) -> StreamingResponse:
    print('Docuemnt ID'+ document_id)
    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
+
+
+

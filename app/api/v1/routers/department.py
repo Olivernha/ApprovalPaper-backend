@@ -10,10 +10,13 @@ router = APIRouter(
     tags=["department"],
     responses={404: {"description": "Not found"}},
 )
+
 @router.get("/", response_model=List[DepartmentResponse])
 async def get_departments():
     return await DepartmentController.get_departments()
 
+
+    # return await DocumentController.count_docs_by_status()
 @router.post("/create", status_code=status.HTTP_201_CREATED, response_model=DepartmentResponse)
 async def create_department(department: DepartmentCreate):
     return await DepartmentController.create_department(department)

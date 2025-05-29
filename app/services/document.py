@@ -1,6 +1,8 @@
 from datetime import datetime
 import mimetypes
 from typing import List, Union, Dict, Any, Optional
+
+from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
@@ -48,6 +50,7 @@ class DocumentService:
             return DocumentInDB(**document)
         except Exception as e:
             handle_service_exception(e)
+
 
     async def create_document(self, document: DocumentCreate) -> DocumentInDB:
         try:
@@ -122,6 +125,7 @@ class DocumentService:
         current_user_data: AuthInAdminDB
     ) -> DocumentInDB:
         try:
+
             document_id = to_object_id(update_data.doc_id)
             username = current_user_data.username
             is_admin = current_user_data.is_admin
@@ -132,7 +136,13 @@ class DocumentService:
 
             if not is_admin and not await self.is_your_document(document_id, username):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to update this document")
-            update_data.file_id = PyObjectId(update_data.file_id)
+
+            if update_data.file_id is not None:
+                try:
+                    update_data.file_id = PyObjectId(update_data.file_id)
+                except InvalidId:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file_id format")
+
             update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
             update_fields.pop("doc_id", None)
             # if fields are empty, remove them from update_fields
@@ -140,8 +150,8 @@ class DocumentService:
 
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
-                    update_fields["filed_by"] = username
-                    update_fields["filed_date"] = datetime.now()
+                    update_fields["filed_by"] = username or document.get("filed_by")
+                    update_fields["filed_date"] = datetime.now() or document.get("filed_date")
                 elif update_fields.get("status") == "Not Filed":
                     update_fields["filed_by"] = None
                     update_fields["filed_date"] = None
@@ -482,46 +492,25 @@ class DocumentService:
             )
         except Exception as e:
             handle_service_exception(e)
-#    try:
-#         if not ObjectId.is_valid(file_id):
-#             raise HTTPException(status_code=400, detail="Invalid file_id format")
 
-#         file_obj_id = ObjectId(file_id)
 
-#         # Use <bucket>.files collection to check metadata
-#         files_collection_name = f"{settings.GRIDFS_BUCKET_NAME}.files"
-#         file_info = await db[files_collection_name].find_one({"_id": file_obj_id})
-#         if not file_info:
-#             raise HTTPException(status_code=404, detail="File not found")
+    async def count_docs_by_status(self, department_id: str) -> Dict[str, int]:
+        try:
+            department_id = to_object_id(department_id)
+            pipeline = [
+                {"$match": {"department_id": department_id}},
+                {"$group": {
+                    "_id": "$status",
+                    "count": {"$sum": 1}
+                }}
+            ]
+            results = await self.get_collection().aggregate(pipeline).to_list(length=None)
 
-#         # Auth check
-#         if not current_user_data.is_admin and file_info["metadata"]["uploaded_by"] != current_user_data.username:
-#             raise HTTPException(status_code=403, detail="You are not authorized to download this file")
-
-#         # Proceed with file download
-#         gridfs_file = await gridfs_bucket.open_download_stream(file_obj_id)
-
-#         content_type = (
-#             gridfs_file.metadata.get("content_type", "application/octet-stream")
-#             if gridfs_file.metadata else "application/octet-stream"
-#         )
-#         filename = gridfs_file.filename or "document"
-#         extension = mimetypes.guess_extension(content_type) or ""
-#         if extension and not filename.lower().endswith(extension.lower()):
-#             filename += extension
-
-#         filename = filename.replace("\n", "").replace("\r", "").replace(";", "")
-
-#         return StreamingResponse(
-#             AsyncIteratorWrapper(gridfs_file),
-#             media_type=content_type,
-#             headers={
-#                 "Content-Disposition": f'attachment; filename="{filename}"',
-#                 "Content-Length": str(gridfs_file.length)
-#             }
-#         )
-
-#     except HTTPException as http_exc:
-#         raise http_exc
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
+            status_counts = {result["_id"]: result["count"] for result in results}
+            return {
+                "Not Filed": status_counts.get("Not Filed", 0),
+                "Filed": status_counts.get("Filed", 0),
+                "Suspended": status_counts.get("Suspended", 0)
+            }
+        except Exception as e:
+            handle_service_exception(e)
