@@ -206,7 +206,7 @@ class DocumentService:
     async def get_documents(self) -> List[DocumentInDB]:
         try:
             results = self.get_collection().find()
-            documents = await results.to_list(length=100)
+            documents = await results.to_list()
             return [DocumentInDB(**doc) for doc in documents]
         except Exception as e:
             handle_service_exception(e)
