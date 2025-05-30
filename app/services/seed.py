@@ -21,11 +21,16 @@ logger = logging.getLogger(__name__)
 async def seed_users() -> List[Dict]:
     db = MongoDB.get_database()
     users = []
-    usernames = set()
-
-    while len(usernames) < 10:
-        usernames.add(fake.user_name())
-    usernames = list(usernames)
+    usernames = [
+        "alvinloh",
+        "tracysoo",
+        "joanneloh",
+        "mildredphua",
+        "pricilialee",
+        "angys",
+        "jasminetan",
+        "chuacy"
+    ]
 
     for username in usernames:
         user = AdminUser(username=username)
@@ -40,38 +45,81 @@ async def seed_users() -> List[Dict]:
 
 async def seed_departments() -> List[Dict]:
     db = MongoDB.get_database()
-    department_names = set()
 
-    while len(department_names) < 20:
-        dept_name = fake.catch_phrase().title() + " Department"
-        department_names.add(dept_name)
-    department_names = list(department_names)
+    department_map = {
+        "TPG": [
+            "Tender Committee", "Chairman", "PCEO", "VP(IT)",
+            "SVP(G) - OLD REFNO", "VP(HCM)", "TBP Project",
+            "SVP(BD)", "VP(BD) - OLD REFNO", "Vice President (Generation)/Plant Manager",
+            "Senior Vice President (Generation & Utilities)", "Chief Compliance Officer/General Counsel",
+            "VP (M&E) / Dy Plant Manager", "Chief Operating Officer"
+        ],
+        "TPL": [
+            "Tender Committee", "Chairman", "PCEO - OLD REF NO", "VP(IT)",
+            "SVP(G)", "VP(HCM)", "TBP Project", "SVP(BD)",
+            "VP(BD) - OLD REFNO", "Director", "Chief Compliance Officer/General Counsel"
+        ],
+        "TPU": [
+            "Chairman", "Director", "Senior Vice President (Technical Services)",
+            "Senior Vice President (Utilities) - OLD REFNO", "Senior Vice President (Project) - OLD REFNO",
+            "Chief Financial Officer", "Vice President (Business Development) - OLD REFNO",
+            "VP(IT)", "VP(Production) - OLD REFNO", "Vice President (Utilities)/Plant Manager",
+            "Senior Vice President (Generation & Utilities)", "Senior Vice President (Business Development)",
+            "AVP(JIDP Business)", "Chief Compliance Officer/General Counsel"
+        ],
+        "SP": ["TPG-CCO", "TPG-COO/SVP(F&T)", "TPG-PCEO"],
+        "SSS": ["TPG-CCO", "TPG-COO/SVP(F&T)", "TPG-PCEO"],
+        "SSD": ["TPG-CCO", "TPG-COO/SVP(F&T)", "TPG-PCEO"],
+        "SGI": ["TPG-CCO", "TPG-COO/SVP(F&T)", "TPG-PCEO"]
+    }
 
-    document_type_templates = [
-        "Proposal", "Report", "Contract", "Specification", "Audit",
-        "Manual", "Plan", "Review", "Invoice", "Policy",
-        "Agreement", "Budget", "Assessment", "Memo", "Procedure",
-        "Schedule", "Analysis", "Forecast", "Guideline", "Summary"
-    ]
-
-    def generate_doc_type(name_prefix, i, dept_name):
-        return {
-            "_id": ObjectId(),
-            "name": f"{name_prefix} {i+1}",
-            "prefix": f"{dept_name[:3].upper()}-{name_prefix[:4].upper()}{i+1}",
-            "padding": 4,
-            "created_date": fake.date_time_this_decade()
+    def generate_prefix(dept_code: str, doc_type_name: str) -> str:
+        prefix_map = {
+            "Tender Committee": "TC",
+            "Chairman": "CH",
+            "PCEO": "PCEO",
+            "PCEO - OLD REF NO": "PCEOOLD",
+            "VP(IT)": "VPIT",
+            "VP(HCM)": "VPHCM",
+            "SVP(G)": "SVPG",
+            "SVP(G) - OLD REFNO": "SVPGOLD",
+            "SVP(BD)": "SVPBD",
+            "VP(BD) - OLD REFNO": "VPBDOLD",
+            "TBP Project": "TBP",
+            "Director": "DIR",
+            "Chief Compliance Officer/General Counsel": "CCO",
+            "Chief Financial Officer": "CFO",
+            "Chief Operating Officer": "COO",
+            "Senior Vice President (Technical Services)": "SVPTS",
+            "Senior Vice President (Utilities) - OLD REFNO": "SVPUOLD",
+            "Senior Vice President (Project) - OLD REFNO": "SVPPOLD",
+            "Vice President (Business Development) - OLD REFNO": "VPBDOLD",
+            "VP(Production) - OLD REFNO": "VPPROOLD",
+            "Vice President (Utilities)/Plant Manager": "VPUPM",
+            "Senior Vice President (Generation & Utilities)": "SVPGU",
+            "Senior Vice President (Business Development)": "SVPBD",
+            "AVP(JIDP Business)": "AVPJIDP",
+            "VP (M&E) / Dy Plant Manager": "VPMEDPM",
+            "Vice President (Generation)/Plant Manager": "VPGPM",
+            "TPG-CCO": "CCO",
+            "TPG-COO/SVP(F&T)": "COOSVPFT",
+            "TPG-PCEO": "PCEO"
         }
 
+        prefix_code = prefix_map.get(doc_type_name, ''.join(filter(str.isalnum, doc_type_name)).upper()[:6])
+        return f"{dept_code}-{prefix_code}"
+
     departments = []
-    for i, dept_name in enumerate(department_names):
-        if i == 0:  # First department gets 8 document types
-            doc_types = [
-                generate_doc_type(document_type_templates[j % len(document_type_templates)], j, dept_name)
-                for j in range(8)
-            ]
-        else:  # Others get 1 document type
-            doc_types = [generate_doc_type(document_type_templates[i % len(document_type_templates)], 0, dept_name)]
+    for dept_name, doc_type_names in department_map.items():
+        doc_types = []
+        for doc_type_name in doc_type_names:
+            doc_types.append({
+                "_id": ObjectId(),
+                "name": doc_type_name,
+                "prefix": generate_prefix(dept_name, doc_type_name),
+                "padding": 4,
+                "created_date": fake.date_time_this_decade()
+            })
 
         departments.append({
             "_id": ObjectId(),
