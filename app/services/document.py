@@ -1,12 +1,14 @@
 from datetime import datetime
+import io
 import mimetypes
 from typing import List, Union, Dict, Any, Optional
 
 from bson.errors import InvalidId
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+import pandas as pd
 from app.core.utils import AsyncIteratorWrapper 
 from app.core.config import settings  # Import settings from the appropriate module
 
@@ -27,6 +29,8 @@ from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
 from app.services.admin import AdminService
 import logging
+
+from app.services.department import DepartmentService
 
 
 logger = logging.getLogger(__name__)
@@ -51,73 +55,113 @@ class DocumentService:
         except Exception as e:
             handle_service_exception(e)
 
-
+    async def get_document_by_name(self, document_title: str) -> DocumentInDB:
+        try:
+            document = await self.get_collection().find_one({"title": {"$regex": document_title, "$options": "i"}})
+            if not document:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+            return DocumentInDB(**document)
+        except Exception as e:
+            handle_service_exception(e)
     async def create_document(self, document: DocumentCreate) -> DocumentInDB:
         try:
-            db = MongoDB.get_database()
-            if db is None:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database connection failed")
+           
 
+            # Convert to ObjectId
             document.department_id = to_object_id(document.department_id)
             document.document_type_id = to_object_id(document.document_type_id)
 
-            dept_check = await db["departments"].find_one({
+            # Fetch department with matching document_type
+            department = await DepartmentService().get_collection().find_one({
                 "_id": document.department_id,
                 "document_types._id": document.document_type_id
             })
-            if not dept_check:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid department_id or document_type_id")
+            if not department:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid department_id or document_type_id"
+                )
 
-            cursor = db["departments"].aggregate([
+            year = datetime.now().year
+            year_key = str(year)
+
+            # Build update path for atomic increment
+            update_result = await DepartmentService().get_collection().update_one(
+                {
+                    "_id": document.department_id,
+                    "document_types._id": document.document_type_id
+                },
+                {
+                    "$inc": {
+                        f"document_types.$.counters.{year_key}": 1
+                    }
+                }
+            )
+            if update_result.modified_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to increment document counter"
+                )
+
+            # Retrieve updated document type
+            pipeline = [
                 {"$match": {"_id": document.department_id}},
                 {"$unwind": "$document_types"},
                 {"$match": {"document_types._id": document.document_type_id}},
-                {"$project": {"prefix": "$document_types.prefix", "padding": "$document_types.padding"}}
-            ])
-            doc_type = await cursor.to_list(length=1)
-            if not doc_type:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document type not found")
-            doc_type = doc_type[0]
+                {"$project": {
+                    "prefix": "$document_types.prefix",
+                    "padding": "$document_types.padding",
+                    "counters": "$document_types.counters"
+                }}
+            ]
+            cursor = DepartmentService().get_collection().aggregate(pipeline)
+            doc_type_info = await cursor.to_list(length=1)
+            if not doc_type_info:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Document type not found"
+                )
+            doc_type = doc_type_info[0]
+            counter_value = doc_type["counters"].get(year_key, 1)
+            padding = doc_type.get("padding", 2)
+            prefix = doc_type["prefix"]
 
-            year = datetime.now().year
-            counter_doc = await db["sequence_counters"].find_one_and_update(
-                {
-                    "department_id": document.department_id,
-                    "document_type_id": document.document_type_id,
-                    "year": year
-                },
-                {"$inc": {"sequence_value": 1}},
-                upsert=True,
-                return_document=True
-            )
-            if not counter_doc.get("sequence_value"):
-                counter_doc["sequence_value"] = 1
-                counter_doc["padding"] = doc_type.get("padding", 3)
+            seq_str = str(counter_value)
+            padded_seq = seq_str if len(seq_str) > padding else seq_str.zfill(padding)
 
-            padded_seq = str(counter_doc["sequence_value"]).zfill(counter_doc.get("padding", 3))
             year_suffix = str(year % 100)
-            ref_no = f"{doc_type['prefix']}/{year_suffix}/{padded_seq}"
+            ref_no = f"{prefix}/{year_suffix}/{padded_seq}"
 
+            # Ensure ref_no is unique
             existing = await self.get_collection().find_one({"ref_no": ref_no})
             if existing:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Reference number exists")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Reference number already exists"
+                )
 
+            # Prepare final document
             document_data = document.model_dump()
             document_data.update({
                 "_id": ObjectId(),
                 "ref_no": ref_no,
                 "created_date": datetime.now(),
                 "status": "Not Filed",
-                "created_by": document_data.get("created_by"),
+                "created_by": document.created_by,
             })
 
-            # remove field if empty
+            # Remove empty fields
             document_data = {k: v for k, v in document_data.items() if v is not None}
+
+            # Insert document
             result = await self.get_collection().insert_one(document_data)
             document_data["_id"] = result.inserted_id
+
             return DocumentInDB(**document_data)
+
         except Exception as e:
             handle_service_exception(e)
+
 
     async def update_document(
         self,
@@ -128,13 +172,14 @@ class DocumentService:
 
             document_id = to_object_id(update_data.doc_id)
             username = current_user_data.username
+            full_name = current_user_data.full_name
             is_admin = current_user_data.is_admin
 
             document = await self.get_collection().find_one({"_id": document_id})
             if not document:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-            if not is_admin and not await self.is_your_document(document_id, username):
+            if not is_admin and not await self.is_your_document(document_id, full_name):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to update this document")
 
             if update_data.file_id is not None:
@@ -424,9 +469,10 @@ class DocumentService:
                 )
                 if not counter_doc.get("sequence_value"):
                     counter_doc["sequence_value"] = 1
-                    counter_doc["padding"] = doc_type.get("padding", 3)
+                    counter_doc["padding"] = doc_type.get("padding", 2)
+                seq_str = str(counter_doc["sequence_value"])
+                padded_seq = seq_str if len(seq_str) > counter_doc.get("padding", 2) else seq_str.zfill(counter_doc.get("padding", 2))
 
-                padded_seq = str(counter_doc["sequence_value"]).zfill(counter_doc.get("padding", 3))
                 year_suffix = str(year % 100)
                 ref_no = f"{doc_type['prefix']}/{padded_seq}/{year_suffix}"
 
@@ -460,7 +506,7 @@ class DocumentService:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file associated with this document")
 
             is_admin = current_user.is_admin
-            if not is_admin and not await self.is_your_document(document_id, current_user.username):
+            if not is_admin and not await self.is_your_document(document_id, current_user.full_name):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to download this document")
 
             file_id = to_object_id(document.file_id)
@@ -514,3 +560,63 @@ class DocumentService:
             }
         except Exception as e:
             handle_service_exception(e)
+
+
+    async def import_documents_from_csv(self, approval_paper_file: UploadFile) -> List[DocumentInDB]:
+        if not approval_paper_file.filename.endswith('.csv'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV")
+
+        approval_paper_df = pd.read_csv(io.BytesIO(await approval_paper_file.read()))
+        documents=[]
+        for _, row in approval_paper_df.iterrows():
+            # Handle potential missing or invalid values
+            try:
+                created_date = datetime.strptime(row["CreatedDate"], "%Y-%m-%d %H:%M:%S.%f") if isinstance(row["CreatedDate"], str) else None
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail=f"Invalid CreatedDate format in row {row['id']}, expected 'YYYY-MM-DD HH:MM:SS.ssssss'")
+            filed_date = None
+            if isinstance(row["FiledDate"], str) and row["FiledDate"].strip():
+                try:
+                    filed_date = datetime.strptime(row["FiledDate"], "%Y-%m-%d %H:%M:%S.%f")
+                except (ValueError, TypeError):
+                    raise HTTPException(status_code=400, detail=f"Invalid FiledDate format in row {row['id']}, expected 'YYYY-MM-DD HH:MM:SS.ssssss'")
+
+                # Clean and validate fields
+            ref_no = row["RefNo"].strip() if isinstance(row["RefNo"], str) else ""
+            title = row["Title"].strip() if isinstance(row["Title"], str) else ""
+            created_by = row["CreatedBy"].strip() if isinstance(row["CreatedBy"], str) else ""
+            filed_by = row["FiledBy"].strip() if isinstance(row["FiledBy"], str) and row["FiledBy"].strip() else None
+            status_id = int(row["StatusID"]) if pd.notna(row["StatusID"]) and str(row["StatusID"]).isdigit() else None
+            document_type_id = int(row["DocumentTypeID"]) if pd.notna(row["DocumentTypeID"]) and str(row["DocumentTypeID"]).isdigit() else None
+            department_id = int(row["DepartmentID"]) if pd.notna(row["DepartmentID"]) and str(row["DepartmentID"]).isdigit() else None
+
+            if not ref_no or not title or not created_by or status_id is None or document_type_id is None or department_id is None:
+                raise HTTPException(status_code=400, detail=f"Missing or invalid required fields in row {row['id']}")
+
+            dept_id = await DepartmentService().get_department_by_custom_id(department_id)
+            doc_type_id = await DepartmentService().get_document_types_by_custom_id(document_type_id)
+
+            document = DocumentInDB(
+                ref_no=ref_no,
+                title=title,
+                status='Not Filed' if status_id == 1 else 'Filed' if status_id == 2 else 'Suspended',
+                created_by=created_by,
+                created_date=created_date,
+                filed_by=filed_by,
+                filed_date=filed_date,
+                document_type_id=PyObjectId(doc_type_id),
+                department_id=PyObjectId(dept_id)
+            )
+
+            # Convert to MongoDB-compatible format
+            document_dict = document.model_dump(by_alias=True)
+            document_dict["_id"] = PyObjectId(ObjectId())
+
+            # Insert into MongoDB
+            await self.get_collection().insert_one(document_dict)
+            
+            # Retrieve inserted document
+            inserted_doc = await self.get_collection().find_one({"_id": document_dict["_id"]})
+            documents.append(DocumentInDB(**inserted_doc))
+
+        return documents

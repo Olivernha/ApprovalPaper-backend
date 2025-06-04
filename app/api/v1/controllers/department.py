@@ -26,7 +26,18 @@ class DepartmentController:
     @staticmethod
     async def get_document_types(department_id: str) -> List[DocumentTypeInDB]:
         return await DepartmentService().get_document_types(department_id)
+    
+    @staticmethod
+    async def get_document_types_by_department_name(department_name: str) -> List[DocumentTypeInDB]:
+        return await DepartmentService().get_document_types_by_department_name(department_name)
 
     @staticmethod
     async def get_all_document_types_with_departments() -> List[DocumentTypeWithDepartment]:
         return await DepartmentService().get_all_document_types_with_departments()
+    
+    @staticmethod
+    async def import_csv(dept_file, doc_type_file, gen_id_file) :
+        try:
+            return await DepartmentService().import_csv(dept_file, doc_type_file, gen_id_file)
+        except Exception as e:
+            handle_service_exception(e)

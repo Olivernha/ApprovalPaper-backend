@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 async def get_current_user_from_header(request :Request) -> AuthInAdminDB:
         
     username = request.headers.get("X-User-Name")
-    if not username:
+    full_name = request.headers.get("X-User-Full-Name", None)
+
+    if not username :
         logger.warning("No username provided in X-User-Name header")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -21,6 +23,7 @@ async def get_current_user_from_header(request :Request) -> AuthInAdminDB:
         user = await admin_service.get_user_by_username(username)
         user_payload = {
             "username": username,
+            "full_name": full_name,
             "is_admin": user is not None
         }
         return AuthInAdminDB(**user_payload)

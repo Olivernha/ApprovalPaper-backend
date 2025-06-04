@@ -73,8 +73,13 @@ async def count_docs_by_status(department_id: str = Path(..., title="Department 
 async def get_document(document_id: str = Path(..., title="Document ID", description="The ObjectId of the document")):
     return await DocumentController.get_document_by_id(document_id)
 
+@router.get('/name/{document_title}', response_model=DocumentResponse)
+async def get_document_by_name(document_title: str = Path(..., title="Document title", description="The name of the document")):
+    return await DocumentController.get_document_by_name(document_title)
+
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DocumentResponse)
 async def create_document(document: DocumentCreate, current_user: AuthInAdminDB = Depends(get_current_user_from_header)):
+   
     return await DocumentController.create_document(document, current_user)
 
 @router.put("/{doc_id}", status_code=status.HTTP_200_OK, response_model=DocumentResponse)
@@ -115,8 +120,8 @@ async def update_document(
             department_id=department_id,
             file_id=file_id
         )
-    print(update_data.model_dump())
-    print(file)
+
+
     if file is not None:
         update_data.file_id = await upload_file_to_gridfs(file, gridfs_bucket, current_user_data.username)
 
@@ -190,8 +195,15 @@ async def download_document(
     current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
 ) -> StreamingResponse:
-   print('Docuemnt ID'+ document_id)
+
    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
 
 
+@router.post('/import-csv', status_code=status.HTTP_201_CREATED)
+async def import_documents_from_csv(
+    file: UploadFile = File(..., description="CSV file containing document data"),
+):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a CSV file.")
 
+    return await DocumentController.import_documents_from_csv(file)

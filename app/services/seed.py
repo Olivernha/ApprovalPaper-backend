@@ -117,7 +117,7 @@ async def seed_departments() -> List[Dict]:
                 "_id": ObjectId(),
                 "name": doc_type_name,
                 "prefix": generate_prefix(dept_name, doc_type_name),
-                "padding": 4,
+                "padding": 2,
                 "created_date": fake.date_time_this_decade()
             })
 
@@ -141,7 +141,6 @@ async def seed_documents(departments: List[Dict], users: List[Dict]) -> None:
     usernames = [user["username"] for user in users]
     document_service = DocumentService()
     await db["documents"].delete_many({})
-    await db["sequence_counters"].delete_many({})
 
     doc_type_with_100_created = False
 

@@ -1,5 +1,5 @@
 from typing import List, Union
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
@@ -26,6 +26,10 @@ class DocumentController:
     @staticmethod
     async def get_document_by_id(document_id: str) -> DocumentInDB:
         return await DocumentService().get_document_by_id(document_id)
+
+    @staticmethod
+    async def get_document_by_name(document_title: str) -> DocumentInDB:
+        return await DocumentService().get_document_by_name(document_title)
     @staticmethod
     async def get_documents_paginated(
         page: int,
@@ -41,11 +45,12 @@ class DocumentController:
             page, limit, search, status_filter, department_id, document_type_id, sort_field, sort_order
         )
 
+    
     @staticmethod
     async def create_document(document: DocumentCreate, current_user: AuthInAdminDB) -> DocumentInDB:
-        document.created_by = current_user.username
+        document.created_by = current_user.full_name
         return await DocumentService().create_document(document)
-
+ 
     @staticmethod
     async def update_document(
         update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
@@ -55,7 +60,7 @@ class DocumentController:
 
     @staticmethod
     async def delete_document(document_id: str, current_user: AuthInAdminDB) -> dict:
-        return await DocumentService().delete_document(document_id, current_user.username)
+        return await DocumentService().delete_document(document_id, current_user.full_name)
 
     @staticmethod
     async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:
@@ -71,7 +76,6 @@ class DocumentController:
         current_user: AuthInAdminDB,
         gridfs_bucket: AsyncIOMotorGridFSBucket,
     ) -> StreamingResponse:
-        print(current_user.username)
         return await DocumentService().download_document(document_id, gridfs_bucket, current_user)
 
     @staticmethod
@@ -79,3 +83,8 @@ class DocumentController:
          """ count docs by status with department id """
 
          return await DocumentService().count_docs_by_status(department_id)
+    
+    @staticmethod
+    async def import_documents_from_csv(document_file: UploadFile) -> List[DocumentInDB]:
+
+        return await DocumentService().import_documents_from_csv(document_file)

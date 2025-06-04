@@ -6,7 +6,7 @@ from app.core.database import MongoDB
 from app.models.department import DepartmentModel
 from app.models.document import DocumentModel
 from app.models.user import UserModel
-from app.api.v1.routers import admin, department, document
+from app.api.v1.routers import admin,  department, document
 from app.services.seed import seed_data
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -60,6 +60,7 @@ app.add_middleware(
 app.include_router(admin.router)
 app.include_router(department.router)
 app.include_router(document.router)
+# app.include_router(dataTransfer.router)
 
 @app.get("/health")
 async def health_check():
