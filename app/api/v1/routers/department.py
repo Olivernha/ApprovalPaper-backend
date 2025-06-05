@@ -55,15 +55,3 @@ async def delete_document_type(
     return await DepartmentController.delete_document_type(department_id, document_type_id)
 
 
-@router.post("/import-csv", response_model=List[DepartmentResponse])
-async def import_csv_from_upload(
-    department_file: UploadFile = File(...),
-    document_type_file: UploadFile = File(...),
-    generated_id_file: UploadFile = File(...)
-):
-    try:
-        return await DepartmentService().import_csv(
-            department_file, document_type_file, generated_id_file
-        )
-    except Exception as e:
-        handle_service_exception(e)

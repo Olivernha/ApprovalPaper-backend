@@ -84,7 +84,3 @@ class DocumentController:
 
          return await DocumentService().count_docs_by_status(department_id)
     
-    @staticmethod
-    async def import_documents_from_csv(document_file: UploadFile) -> List[DocumentInDB]:
-
-        return await DocumentService().import_documents_from_csv(document_file)

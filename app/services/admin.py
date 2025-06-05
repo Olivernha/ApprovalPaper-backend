@@ -6,7 +6,7 @@ from app.schemas.admin import AdminUser
 from app.core.exceptions import handle_service_exception
 
 class AdminService:
-    def __init__(self, collection_name: str = "users"):
+    def __init__(self, collection_name: str = "admins"):
         self.collection_name = collection_name
 
     def get_collection(self):

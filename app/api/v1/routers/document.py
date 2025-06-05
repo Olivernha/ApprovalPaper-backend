@@ -199,11 +199,3 @@ async def download_document(
    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
 
 
-@router.post('/import-csv', status_code=status.HTTP_201_CREATED , response_model=List[DocumentResponse])
-async def import_documents_from_csv(
-    file: UploadFile = File(..., description="CSV file containing document data"),
-):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a CSV file.")
-
-    return await DocumentController.import_documents_from_csv(file)

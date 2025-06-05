@@ -5,8 +5,8 @@ from app.schemas.admin import AdminUser
 from app.core.config import settings
 
 router = APIRouter(
-    prefix=f"{settings.API_V1_PREFIX}/users",
-    tags=["users"],
+    prefix=f"{settings.API_V1_PREFIX}/admins",
+    tags=["admins"],
     responses={
         404: {"description": "User not found"},
         409: {"description": "Username already exists"},

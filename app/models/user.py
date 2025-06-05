@@ -4,7 +4,7 @@ from app.core.database import MongoDB
 
 
 class UserModel:
-    COLLECTION_NAME = "users"
+    COLLECTION_NAME = "admins"
 
     @staticmethod
     async def ensure_indexes() -> None:
