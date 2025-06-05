@@ -42,7 +42,7 @@ async def import_csv_files(
 
         # Process department-related CSVs
         departments = await service.import_csv(department_file, document_type_file, generated_id_file)
-        
+
         # Process approval paper CSV if provided
         documents = []
         if approval_paper_file:
@@ -55,9 +55,9 @@ async def import_csv_files(
 
         # Prepare response
         response = {
-            "departments": [dept.dict() for dept in departments],
-            "documents": [doc.dict() for doc in documents] if documents else [],
-            "admins": [admin.dict() for admin in admins] if admins else []
+            "departments": [dept.model_dump() for dept in departments],
+            "documents": [doc.model_dump() for doc in documents] if documents else [],
+            "admins": [admin for admin in admins] if admins else []
         }
 
         return response

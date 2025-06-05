@@ -264,7 +264,7 @@ class CSVImportService:
 
         return documents
     
-    async def import_admins_from_csv(self, admin_file: UploadFile) -> List[AdminUser]:
+    async def import_admins_from_csv(self, admin_file: UploadFile) -> List[dict]:
         if not admin_file.filename.endswith('.csv'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV")
 
@@ -308,7 +308,11 @@ class CSVImportService:
                 # Retrieve the inserted/updated admin for response
                 inserted_admin = await self.get_admin_collection().find_one({"_id": admin_dict["_id"]})
                 if inserted_admin:
-                    admins.append(AdminUser(**inserted_admin))
+                    inserted_admin["_id"] = PyObjectId(inserted_admin["_id"])
+                    admins.append({
+                           "_id": str(inserted_admin["_id"]),
+                           "username": inserted_admin["username"]
+                    })
 
             except Exception:
                 # Silently skip row on any unexpected error
