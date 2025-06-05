@@ -3,7 +3,7 @@ import io
 import uuid
 from fastapi import HTTPException, status
 from bson import ObjectId
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Coroutine
 
 import pandas as pd
 
@@ -170,130 +170,191 @@ class DepartmentService:
         except Exception as e:
             handle_service_exception(e)
 
-    async def import_csv(self, department_file, document_type_file, generated_id_file) -> DepartmentResponse:
-
+    async def import_csv(self, department_file, document_type_file, generated_id_file) -> list[Any] | None:
         try:
-                # Validate file extensions
-                for file in [department_file, document_type_file, generated_id_file]:
-                    if not file.filename.endswith('.csv'):
-                        raise HTTPException(status_code=400, detail=f"File {file.filename} must be a CSV file")
+            # Validate file extensions
+            for file in [department_file, document_type_file, generated_id_file]:
+                if not file.filename.endswith('.csv'):
+                    raise HTTPException(status_code=400, detail=f"File {file.filename} must be a CSV file")
 
-                # Read uploaded CSV files
-                departments_df = pd.read_csv(io.BytesIO(await department_file.read()))
-                document_types_df = pd.read_csv(io.BytesIO(await document_type_file.read()))
-                generated_ids_df = pd.read_csv(io.BytesIO(await generated_id_file.read()))
+            # Read uploaded CSV files
+            departments_df = pd.read_csv(io.BytesIO(await department_file.read()))
+            document_types_df = pd.read_csv(io.BytesIO(await document_type_file.read()))
+            generated_ids_df = pd.read_csv(io.BytesIO(await generated_id_file.read()))
 
-                # Create mappings for validation
-                department_ids = set(departments_df['id'])
-                document_type_ids = set(document_types_df['id'])
+            # Clean column names (strip whitespace)
+            departments_df.columns = departments_df.columns.str.strip()
+            document_types_df.columns = document_types_df.columns.str.strip()
+            generated_ids_df.columns = generated_ids_df.columns.str.strip()
 
-                # Validate generatedid.csv
-                for _, row in generated_ids_df.iterrows():
-                    if row['departmentid'] not in department_ids:
-                        raise HTTPException(status_code=400, detail=f"Invalid departmentid {row['departmentid']} in generatedid.csv")
-                    if row['documenttypeid'] not in document_type_ids:
-                        raise HTTPException(status_code=400, detail=f"Invalid documenttypeid {row['documenttypeid']} in generatedid.csv")
+            # STEP 1: Connect Document Types to Departments
+            print("Step 1: Connecting document types to departments...")
 
-                # Create a mapping of document type ID to prefix, padding, and counters from generatedid.csv
-                doc_type_info = {}
-                for _, row in generated_ids_df.iterrows():
-                    doc_type_id = row['documenttypeid']
-                    doc_type_info[doc_type_id] = {
-                        'prefix': row['prefix'],
-                        'padding': int(row['padding']),
-                        'counters': {str(int(row['year'])): int(row['number'])},
-                        'departmentid': row['departmentid'],
-                        'inserted_id': row['id'] 
+            # Create department lookup
+            dept_lookup = {row['id']: row['name'] for _, row in departments_df.iterrows()}
+
+            # Group document types by department
+            dept_doc_types = {}
+            for _, doc_type_row in document_types_df.iterrows():
+                dept_id = doc_type_row['departmentid']
+                doc_type_id = doc_type_row['id']
+                doc_type_name = doc_type_row['name']
+
+                if dept_id not in dept_lookup:
+                    print(f"Warning: Department ID {dept_id} not found for document type {doc_type_name}")
+                    continue
+
+                if dept_id not in dept_doc_types:
+                    dept_doc_types[dept_id] = []
+
+                # Create basic document type (without prefix info yet)
+                doc_type = {
+                    'inserted_id': doc_type_id,
+                    'name': doc_type_name,
+                    'prefix': None,  # Will be filled in Step 2
+                    'padding': None,  # Will be filled in Step 2
+                    'counters': {},  # Will be filled in Step 2
+                    'created_date': datetime.now()
+                }
+                dept_doc_types[dept_id].append(doc_type)
+
+            print(
+                f"Connected {sum(len(docs) for docs in dept_doc_types.values())} document types to {len(dept_doc_types)} departments")
+
+            # STEP 2: Add prefix information from generatedid.csv
+            print("Step 2: Adding prefix information from generatedid.csv...")
+
+            # Create lookup for prefix information by document type ID
+            prefix_lookup = {}
+            for _, gen_row in generated_ids_df.iterrows():
+                doc_type_id = gen_row['documenttypeid']
+                year = str(int(gen_row['year']))
+
+                if doc_type_id not in prefix_lookup:
+                    prefix_lookup[doc_type_id] = {
+                        'prefix': gen_row['prefix'],
+                        'padding': int(gen_row['padding']),
+                        'counters': {},
                     }
 
-                # Group document types by department (based on generatedid.csv)
-                departments = []
-                department_groups = generated_ids_df.groupby('departmentid')
+                # Add counter for this year
+                prefix_lookup[doc_type_id]['counters'][year] = int(gen_row['number'])
 
-                for dept_id, group in department_groups:
-                    # Get department details
-                    dept_row = departments_df[departments_df['id'] == dept_id]
-                    if dept_row.empty:
-                        continue  # Skip if department not found
 
-                    dept_name = dept_row['name'].iloc[0]
-                    
-                    # Create document types
-                    document_types = []
-                    for _, row in group.iterrows():
-                        doc_type_id = row['documenttypeid']
-                        doc_type_row = document_types_df[document_types_df['id'] == doc_type_id]
-                        if doc_type_row.empty:
-                            continue  # Skip if document type not found
+            # Update document types with prefix information
+            updated_count = 0
+            for dept_id, doc_types in dept_doc_types.items():
+                for doc_type in doc_types:
+                    doc_type_id = doc_type['inserted_id']
 
-                        doc_info = doc_type_info[doc_type_id]
-                        document_types.append(csvDocumentType(
-                            inserted_id=doc_info['inserted_id'],
-                            name=doc_type_row['name'].iloc[0],
-                            prefix=doc_info['prefix'],
-                            padding=doc_info['padding'],
-                            counters=doc_info['counters'],
-                            created_date=datetime.now()
-                        ))
+                    if doc_type_id in prefix_lookup:
+                        # Use actual prefix info
+                        prefix_info = prefix_lookup[doc_type_id]
+                        doc_type['prefix'] = prefix_info['prefix']
+                        doc_type['padding'] = prefix_info['padding']
+                        doc_type['counters'] = prefix_info['counters']
 
-                    # Create department
-                    department = csvDepartment(
-                        inserted_id=dept_id,
-                        name=dept_name,
-                        created_date=datetime.now(),
-                        document_types=document_types
-                    )
-
-                    # Convert to MongoDB-compatible format
-                    department_dict = department.model_dump(by_alias=True)
-
-                    # Check if department already exists
-                    existing_dept = await self.get_collection().find_one({"name": dept_name})
-                    if existing_dept:
-                        # Merge document types, updating existing ones and adding new ones
-                        existing_doc_types = {doc['name']: doc for doc in existing_dept.get('document_types', [])}
-                        new_doc_types = department_dict['document_types']
-                        
-                        for new_doc_type in new_doc_types:
-                            new_doc_type['_id'] = PyObjectId(ObjectId())  # Assign new PyObjectId
-                            existing_doc_types[new_doc_type['name']] = new_doc_type  # Update or add
-
-                        department_dict['document_types'] = list(existing_doc_types.values())
-                        department_dict['_id'] = existing_dept['_id']  # Use existing _id
                     else:
-                        # Assign new PyObjectId for new department
-                        department_dict['_id'] = PyObjectId(ObjectId())
-                        # Assign PyObjectId to each document type
-                        for doc_type in department_dict['document_types']:
-                            doc_type['_id'] = PyObjectId(ObjectId())
+                        # Use default values for document types without prefix info
+                        doc_type['prefix'] = f"DEFAULT_{doc_type_id}"
+                        doc_type['padding'] = 4
+                        doc_type['counters'] = {}
 
-                    # Insert or update into MongoDB
-                    await self.get_collection().update_one(
-                        {"name": dept_name},
-                        {"$set": department_dict},
-                        upsert=True
-                    )
-                    
-                    # Retrieve inserted/updated document
-                    inserted_dept = await self.get_collection().find_one({"name": dept_name})
+
+
+            print(f"Updated {updated_count} document types with prefix information")
+
+            # STEP 3: Create and save departments with embedded document types
+            print("Step 3: Saving departments to MongoDB...")
+
+            departments = []
+            for dept_id, doc_types in dept_doc_types.items():
+                dept_name = dept_lookup[dept_id]
+
+                # Create department with embedded document types
+                department_dict = {
+                    'inserted_id': dept_id,
+                    'name': dept_name,
+                    'created_date': datetime.now(),
+                    'document_types': doc_types
+                }
+
+                # Check if department already exists
+                existing_dept = await self.get_collection().find_one({"inserted_id": dept_id})
+
+                if existing_dept:
+                    print(f"Updating existing department: {dept_name}")
+
+                    # Merge document types - preserve existing _ids
+                    existing_doc_types = {doc['inserted_id']: doc for doc in existing_dept.get('document_types', [])}
+
+                    for new_doc_type in department_dict['document_types']:
+                        doc_type_id = new_doc_type['inserted_id']
+
+                        if doc_type_id in existing_doc_types:
+                            # Update existing document type but preserve its MongoDB _id
+                            existing_doc_type = existing_doc_types[doc_type_id]
+                            new_doc_type['_id'] = existing_doc_type['_id']
+                            existing_doc_types[doc_type_id] = new_doc_type
+                        else:
+                            # Add new document type with new _id
+                            new_doc_type['_id'] = PyObjectId(ObjectId())
+                            existing_doc_types[doc_type_id] = new_doc_type
+
+                    department_dict['document_types'] = list(existing_doc_types.values())
+                    department_dict['_id'] = existing_dept['_id']  # Preserve existing MongoDB _id
+                else:
+                    print(f"Creating new department: {dept_name}")
+
+                    # New department - assign MongoDB _ids
+                    department_dict['_id'] = PyObjectId(ObjectId())
+                    for doc_type in department_dict['document_types']:
+                        doc_type['_id'] = PyObjectId(ObjectId())
+
+                # Insert or update department in MongoDB
+                await self.get_collection().update_one(
+                    {"inserted_id": dept_id},
+                    {"$set": department_dict},
+                    upsert=True
+                )
+
+                # Retrieve the inserted/updated document for response
+                inserted_dept = await self.get_collection().find_one({"inserted_id": dept_id})
+                if inserted_dept:
                     departments.append(csvDepartment(**inserted_dept))
 
-                return departments
+            print(f"Successfully processed {len(departments)} departments")
 
+            if not departments:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No departments could be processed. Please check your CSV files."
+                )
+
+            return departments
+
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions as-is
         except Exception as e:
+            print(f"Error in import_csv: {str(e)}")
             handle_service_exception(e)
 
-    async def get_document_types_by_custom_id(self, custom_id: int) :
+    from bson import ObjectId
+
+    async def get_document_types_by_custom_id(self, custom_id: int) -> ObjectId | None:
         try:
-            document_type = await self.get_collection().find_one({"inserted_id": custom_id})
-            # get objectid
-            return document_type["_id"] if document_type else None
+            result = await self.get_collection().find_one(
+                {"document_types.inserted_id": custom_id},
+                {"document_types.$": 1}
+            )
+            if result and result.get("document_types"):
+                return result["document_types"][0]["_id"]
+            return None
         except Exception as e:
             handle_service_exception(e)
 
     async def get_department_by_custom_id(self, department_id: int):
         try:
-
             department = await self.get_collection().find_one({"inserted_id": department_id})
             return department["_id"] if department else None
         except Exception as e:

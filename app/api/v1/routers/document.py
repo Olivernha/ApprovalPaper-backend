@@ -79,7 +79,7 @@ async def get_document_by_name(document_title: str = Path(..., title="Document t
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DocumentResponse)
 async def create_document(document: DocumentCreate, current_user: AuthInAdminDB = Depends(get_current_user_from_header)):
-   
+    print(document , current_user)
     return await DocumentController.create_document(document, current_user)
 
 @router.put("/{doc_id}", status_code=status.HTTP_200_OK, response_model=DocumentResponse)
@@ -199,7 +199,7 @@ async def download_document(
    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
 
 
-@router.post('/import-csv', status_code=status.HTTP_201_CREATED)
+@router.post('/import-csv', status_code=status.HTTP_201_CREATED , response_model=List[DocumentResponse])
 async def import_documents_from_csv(
     file: UploadFile = File(..., description="CSV file containing document data"),
 ):

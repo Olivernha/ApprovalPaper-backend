@@ -177,3 +177,18 @@ class BulkUpdateStatusRequest(BaseModel):
             }
         }
     )
+
+
+class csvDocumentData(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    ref_no: Optional[str] = Field(None, min_length=1, description="Unique reference number")
+    title: Optional[str] = Field(None, description="Document title")
+    document_type_id: Optional[PyObjectId] = Field(None, description="Reference to DocumentType ID")
+    department_id: Optional[PyObjectId] = Field(None, description="Reference to Department ID")
+    created_by: Optional[str] = Field(None, description="User who created the document")
+    created_date: Optional[datetime] = Field(None, description="Creation timestamp")
+    filed_by: Optional[str] = Field(None, description="User who filed the document")
+    filed_date: Optional[datetime] = Field(None, description="Filing timestamp")
+    status: Optional[str] = Field(None, description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
+    file_id: Optional[PyObjectId] = None
+    inserted_id: Optional[int] = Field(None, alias="inserted_id")

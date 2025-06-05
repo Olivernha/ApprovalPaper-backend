@@ -23,7 +23,7 @@ from app.schemas.document import (
     DocumentInDB,
     DocumentUpdateNormal,
     DocumentUpdateAdmin,
-    DocumentPaginationResponse,
+    DocumentPaginationResponse, csvDocumentData,
 )
 from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
@@ -561,62 +561,79 @@ class DocumentService:
         except Exception as e:
             handle_service_exception(e)
 
-
     async def import_documents_from_csv(self, approval_paper_file: UploadFile) -> List[DocumentInDB]:
         if not approval_paper_file.filename.endswith('.csv'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV")
 
         approval_paper_df = pd.read_csv(io.BytesIO(await approval_paper_file.read()))
-        documents=[]
+        documents = []
+
         for _, row in approval_paper_df.iterrows():
-            # Handle potential missing or invalid values
             try:
-                created_date = datetime.strptime(row["CreatedDate"], "%Y-%m-%d %H:%M:%S.%f") if isinstance(row["CreatedDate"], str) else None
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail=f"Invalid CreatedDate format in row {row['id']}, expected 'YYYY-MM-DD HH:MM:SS.ssssss'")
-            filed_date = None
-            if isinstance(row["FiledDate"], str) and row["FiledDate"].strip():
-                try:
-                    filed_date = datetime.strptime(row["FiledDate"], "%Y-%m-%d %H:%M:%S.%f")
-                except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail=f"Invalid FiledDate format in row {row['id']}, expected 'YYYY-MM-DD HH:MM:SS.ssssss'")
+                # Validate and parse created_date
+                created_date = None
+                if isinstance(row["CreatedDate"], str) and row["CreatedDate"].strip():
+                    try:
+                        created_date = datetime.strptime(row["CreatedDate"], "%Y-%m-%d %H:%M:%S.%f")
+                    except ValueError:
+                        continue  # Skip row with invalid CreatedDate
+                else:
+                    continue  # Skip row with missing CreatedDate
+
+                # Validate and parse filed_date
+                filed_date = None
+                if isinstance(row["FiledDate"], str) and row["FiledDate"].strip():
+                    try:
+                        filed_date = datetime.strptime(row["FiledDate"], "%Y-%m-%d %H:%M:%S.%f")
+                    except (ValueError, TypeError):
+                        continue  # Skip row with invalid FiledDate
 
                 # Clean and validate fields
-            ref_no = row["RefNo"].strip() if isinstance(row["RefNo"], str) else ""
-            title = row["Title"].strip() if isinstance(row["Title"], str) else ""
-            created_by = row["CreatedBy"].strip() if isinstance(row["CreatedBy"], str) else ""
-            filed_by = row["FiledBy"].strip() if isinstance(row["FiledBy"], str) and row["FiledBy"].strip() else None
-            status_id = int(row["StatusID"]) if pd.notna(row["StatusID"]) and str(row["StatusID"]).isdigit() else None
-            document_type_id = int(row["DocumentTypeID"]) if pd.notna(row["DocumentTypeID"]) and str(row["DocumentTypeID"]).isdigit() else None
-            department_id = int(row["DepartmentID"]) if pd.notna(row["DepartmentID"]) and str(row["DepartmentID"]).isdigit() else None
+                ref_no = row["RefNo"].strip() if isinstance(row["RefNo"], str) else ""
+                title = row["Title"].strip() if isinstance(row["Title"], str) else ""
+                created_by = row["CreatedBy"].strip() if isinstance(row["CreatedBy"], str) else ""
+                filed_by = row["FiledBy"].strip() if isinstance(row["FiledBy"], str) and row[
+                    "FiledBy"].strip() else None
+                status_id = int(row["StatusID"]) if pd.notna(row["StatusID"]) and str(
+                    row["StatusID"]).isdigit() else None
+                document_type_id = int(row["DocumentTypeID"]) if pd.notna(row["DocumentTypeID"]) and str(
+                    row["DocumentTypeID"]).isdigit() else None
+                department_id = int(row["DepartmentID"]) if pd.notna(row["DepartmentID"]) and str(
+                    row["DepartmentID"]).isdigit() else None
 
-            if not ref_no or not title or not created_by or status_id is None or document_type_id is None or department_id is None:
-                raise HTTPException(status_code=400, detail=f"Missing or invalid required fields in row {row['id']}")
 
-            dept_id = await DepartmentService().get_department_by_custom_id(department_id)
-            doc_type_id = await DepartmentService().get_document_types_by_custom_id(document_type_id)
+                # Skip if any required field is invalid
+                if not ref_no or not title or not created_by or status_id is None or document_type_id is None or department_id is None:
+                    continue
 
-            document = DocumentInDB(
-                ref_no=ref_no,
-                title=title,
-                status='Not Filed' if status_id == 1 else 'Filed' if status_id == 2 else 'Suspended',
-                created_by=created_by,
-                created_date=created_date,
-                filed_by=filed_by,
-                filed_date=filed_date,
-                document_type_id=PyObjectId(doc_type_id),
-                department_id=PyObjectId(dept_id)
-            )
+                dept_id = await DepartmentService().get_department_by_custom_id(department_id)
+                doc_type_id = await DepartmentService().get_document_types_by_custom_id(document_type_id)
 
-            # Convert to MongoDB-compatible format
-            document_dict = document.model_dump(by_alias=True)
-            document_dict["_id"] = PyObjectId(ObjectId())
+                document = csvDocumentData(
+                    inserted_id=row["id"],
+                    ref_no=ref_no,
+                    title=title,
+                    status='Not Filed' if status_id == 1 else 'Filed' if status_id == 2 else 'Suspended',
+                    created_by=created_by,
+                    created_date=created_date,
+                    filed_by=filed_by,
+                    filed_date=filed_date,
+                    document_type_id=PyObjectId(doc_type_id),
+                    department_id=PyObjectId(dept_id)
+                )
 
-            # Insert into MongoDB
-            await self.get_collection().insert_one(document_dict)
-            
-            # Retrieve inserted document
-            inserted_doc = await self.get_collection().find_one({"_id": document_dict["_id"]})
-            documents.append(DocumentInDB(**inserted_doc))
+                document_dict = document.model_dump(by_alias=True)
+                document_dict["_id"] = PyObjectId(ObjectId())
+
+                await self.get_collection().insert_one(document_dict)
+                inserted_doc = await self.get_collection().find_one({"_id": document_dict["_id"]})
+                documents.append(csvDocumentData(**inserted_doc))
+
+            except Exception:
+                # Silently skip row on any unexpected error (or add logging if needed)
+                continue
 
         return documents
+
+
+  #but these ids are connected to inserted ids in each collection ,we need to get PyObjectId from each data

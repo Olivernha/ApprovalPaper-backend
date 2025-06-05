@@ -11,7 +11,7 @@ class DocumentModel:
         db = MongoDB.get_database()
         await db[DocumentModel.COLLECTION_NAME].create_index("document_type_id")
         await db[DocumentModel.COLLECTION_NAME].create_index("department_id")
-        await db[DocumentModel.COLLECTION_NAME].create_index("ref_no", unique=True)
+        await db[DocumentModel.COLLECTION_NAME].create_index("ref_no")
         await db[DocumentModel.COLLECTION_NAME].create_index("status")
         await db[DocumentModel.COLLECTION_NAME].create_index("created_by")
         await db[DocumentModel.COLLECTION_NAME].create_index("filed_by")
