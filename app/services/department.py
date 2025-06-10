@@ -189,3 +189,59 @@ class DepartmentService:
             return department["_id"] if department else None
         except Exception as e:
             handle_service_exception(e)
+
+    async def get_department_map_by_custom_ids(self, custom_ids: List[int]) -> Dict[int, PyObjectId]:
+        """
+        Efficiently fetches a map of custom department IDs to MongoDB ObjectIds.
+        
+        Args:
+            custom_ids: A list of integer IDs (e.g., from the CSV).
+            
+        Returns:
+            A dictionary mapping each custom ID to its corresponding MongoDB _id.
+            Example: {101: ObjectId('...'), 102: ObjectId('...')}
+        """
+        if not custom_ids:
+            return {}
+        
+        dept_map = {}
+        cursor = self.get_collection().find(
+            {"inserted_id": {"$in": custom_ids}},
+            {"_id": 1, "inserted_id": 1}
+        )
+        async for dept in cursor:
+            dept_map[dept["inserted_id"]] = dept["_id"]
+        
+        return dept_map
+    
+    async def get_document_type_map_by_custom_ids(self, custom_ids: List[int]) -> Dict[int, PyObjectId]:
+        """
+        Efficiently fetches a map of custom document type IDs to their MongoDB ObjectIds.
+        Uses an aggregation pipeline to search within the embedded document_types array.
+
+        Args:
+            custom_ids: A list of integer IDs for document types.
+
+        Returns:
+            A dictionary mapping each custom document type ID to its MongoDB _id.
+            Example: {201: ObjectId('...'), 202: ObjectId('...')}
+        """
+        if not custom_ids:
+            return {}
+            
+        pipeline = [
+            {"$unwind": "$document_types"},
+            {"$match": {"document_types.inserted_id": {"$in": custom_ids}}},
+            {"$project": {
+                "_id": 0,
+                "doc_type_id": "$document_types.inserted_id",
+                "mongo_id": "$document_types._id"
+            }}
+        ]
+        
+        doc_type_map = {}
+        cursor = self.get_collection().aggregate(pipeline)
+        async for doc in cursor:
+            doc_type_map[doc["doc_type_id"]] = doc["mongo_id"]
+            
+        return doc_type_map

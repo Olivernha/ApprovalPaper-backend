@@ -16,26 +16,24 @@ router = APIRouter(
     }
 )
 
-@router.post("/import-csv", response_model=dict)
-async def import_csv_files(
+@router.post("/import-csv-departments", response_model=dict)
+async def import_csv_departments(
     department_file: UploadFile,
     document_type_file: UploadFile,
     generated_id_file: UploadFile,
-    approval_paper_file: UploadFile,
     admin_file: UploadFile 
 ):
     """
-    Import CSV files to populate departments, document types, documents, and admins in the database.
+    Import CSV files to populate departments, document types, and admins in the database.
 
     Args:
         department_file: CSV file containing department data (id, name)
         document_type_file: CSV file containing document type data (id, name, departmentid)
         generated_id_file: CSV file containing prefix data (documenttypeid, year, prefix, padding, number)
-        approval_paper_file: Optional CSV file containing document data (id, RefNo, Title, etc.)
         admin_file: Optional CSV file containing admin data (id, username)
 
     Returns:
-        A dictionary with processed departments, documents, and admins.
+        A dictionary with processed departments and admins.
     """
     try:
         service = CSVImportService()
@@ -48,17 +46,42 @@ async def import_csv_files(
         if admin_file:
             admins = await service.import_admins_from_csv(admin_file)
 
-        # Process approval paper CSV if provided
-        documents = []
-        if approval_paper_file:
-            documents = await service.import_documents_from_csv(approval_paper_file)
-
-      
         # Prepare response
         response = {
-            "departments": [dept.model_dump() for dept in departments],
-            "documents": [doc.model_dump() for doc in documents] if documents else [],
+            "departments": [dept for dept in departments],
             "admins": [admin for admin in admins] if admins else []
+        }
+
+        return response
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing CSV files: {str(e)}")
+
+
+@router.post("/import-csv-documents", response_model=dict)
+async def import_csv_documents(
+    approval_paper_file: UploadFile
+):
+    """
+    Import CSV file to populate documents in the database.
+
+    Args:
+        approval_paper_file: CSV file containing document data (id, RefNo, Title, etc.)
+
+    Returns:
+        A list of processed documents.
+    """
+    try:
+        service = CSVImportService()
+
+        # Process approval paper CSV
+        documents = await service.import_documents_from_csv(approval_paper_file)
+
+        # Prepare response
+        response = {
+            "documents": [doc for doc in documents]
         }
 
         return response

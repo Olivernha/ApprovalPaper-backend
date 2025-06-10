@@ -9,6 +9,7 @@ class DocumentModel:
     @staticmethod
     async def ensure_indexes() -> None:
         db = MongoDB.get_database()
+       
         await db[DocumentModel.COLLECTION_NAME].create_index("document_type_id")
         await db[DocumentModel.COLLECTION_NAME].create_index("department_id")
         await db[DocumentModel.COLLECTION_NAME].create_index("ref_no")

@@ -22,10 +22,10 @@ async def get_users():
 async def create_user(user: AdminUser):
     return await AdminController.create_user(user)
 
+@router.get('/user/{username}',status_code=status.HTTP_200_OK)
+async def check_user_admin(username: str):
+    return await AdminController.check_user_exists(username)
 @router.get("/{username}", response_model=AdminUser)
 async def get_user(username: str):
     return await AdminController.get_user_by_username(username)
 
-@router.get('/admin/{username}',status_code=status.HTTP_200_OK)
-async def check_user_admin(username: str):
-    return await AdminController.check_user_exists(username)
