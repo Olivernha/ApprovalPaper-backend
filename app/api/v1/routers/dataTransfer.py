@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from app.core.config import settings
 
 router = APIRouter(
-    prefix=f"{settings.API_V1_PREFIX}/import-csv",
+    prefix=f"{settings.API_V1_PREFIX}",
     tags=["import-csv"],
     responses={
         404: {"description": "User not found"},
@@ -43,16 +43,17 @@ async def import_csv_files(
         # Process department-related CSVs
         departments = await service.import_csv(department_file, document_type_file, generated_id_file)
 
-        # Process approval paper CSV if provided
-        documents = []
-        if approval_paper_file:
-            documents = await service.import_documents_from_csv(approval_paper_file)
-
         # Process admin CSV if provided
         admins = []
         if admin_file:
             admins = await service.import_admins_from_csv(admin_file)
 
+        # Process approval paper CSV if provided
+        documents = []
+        if approval_paper_file:
+            documents = await service.import_documents_from_csv(approval_paper_file)
+
+      
         # Prepare response
         response = {
             "departments": [dept.model_dump() for dept in departments],
