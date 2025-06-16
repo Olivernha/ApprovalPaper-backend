@@ -1,7 +1,7 @@
 from datetime import datetime
 import io
 import pandas as pd
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Coroutine
 from bson import ObjectId
 from fastapi import HTTPException, UploadFile, status
 from pymongo import UpdateOne, ReplaceOne
@@ -195,77 +195,103 @@ class CSVImportService:
             dept_doc_types[dept_id].append(doc_type)
         return dept_doc_types
 
-    async def import_documents_from_csv(self, approval_paper_file: UploadFile) -> List[Dict]:
+    async def import_documents_from_csv(self, approval_paper_file: UploadFile) -> list[Any] | dict[str, int | str]:
         """
         Imports a large number of documents from a single CSV file.
-        Uses `insert_many` for high-performance bulk insertion.
+        Uses chunked processing and batch inserts for high performance.
         """
         if not approval_paper_file.filename.endswith('.csv'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a CSV")
 
         try:
-            approval_paper_df = pd.read_csv(io.BytesIO(await approval_paper_file.read()), on_bad_lines='skip')
-            documents_to_insert = []
+            # Define required columns to reduce memory usage
+            required_columns = ["id", "RefNo", "Title", "StatusID", "CreatedBy", "CreatedDate",
+                                "FiledBy", "FiledDate", "DocumentTypeID", "DepartmentID"]
 
-            all_dept_ids = [int(d) for d in approval_paper_df["DepartmentID"].dropna().unique() if str(d).isdigit()]
-            all_doc_type_ids = [int(d) for d in approval_paper_df["DocumentTypeID"].dropna().unique() if str(d).isdigit()]
+            # Initialize response list
+            inserted_doc_ids = []
+            chunk_size = 50000
 
-            dept_map = await DepartmentService().get_department_map_by_custom_ids(all_dept_ids)
-            doc_type_map = await DepartmentService().get_document_type_map_by_custom_ids(all_doc_type_ids)
+            # Process CSV in chunks
+            for chunk in pd.read_csv(
+                    io.BytesIO(await approval_paper_file.read()),
+                    usecols=required_columns,
+                    chunksize=chunk_size,
+                    on_bad_lines='skip'
+            ):
+                # Clean column names
+                chunk.columns = chunk.columns.str.strip()
 
-            if not dept_map or not doc_type_map:
-                raise HTTPException(status_code=400, detail="No valid departments or document types found in CSV. Or Please upload the CSV with valid DepartmentID and DocumentTypeID.")
+                # Get unique IDs for departments and document types
+                all_dept_ids = [int(d) for d in chunk["DepartmentID"].dropna().unique() if str(d).isdigit()]
+                all_doc_type_ids = [int(d) for d in chunk["DocumentTypeID"].dropna().unique() if str(d).isdigit()]
 
-            for _, row in approval_paper_df.iterrows():
-                if not self._is_valid_row(row):
+                # Fetch department and document type mappings
+                dept_map = await DepartmentService().get_department_map_by_custom_ids(all_dept_ids)
+                doc_type_map = await DepartmentService().get_document_type_map_by_custom_ids(all_doc_type_ids)
+
+                if not dept_map or not doc_type_map:
+                    print(f"Skipping chunk: No valid departments or document types found.")
                     continue
-                
-                created_date = pd.to_datetime(row["CreatedDate"], errors='coerce')
-                filed_date = pd.to_datetime(row["FiledDate"], errors='coerce')
 
-                if pd.isna(created_date):
+                # Vectorized validation and data transformation
+                chunk = chunk.dropna(subset=["id", "RefNo", "Title", "StatusID", "CreatedBy", "CreatedDate",
+                                            "DocumentTypeID", "DepartmentID"])
+                chunk["CreatedDate"] = pd.to_datetime(chunk["CreatedDate"], errors='coerce')
+                chunk["FiledDate"] = pd.to_datetime(chunk["FiledDate"], errors='coerce')
+                chunk = chunk[chunk["CreatedDate"].notna()]  # Drop rows with invalid CreatedDate
+
+                # Map status IDs to strings
+                status_map = {1: 'Not Filed', 2: 'Filed', 3: 'Suspended'}
+                chunk["Status"] = chunk["StatusID"].map(status_map).fillna('Suspended')
+
+                # Map department and document type IDs
+                chunk["DepartmentMongoID"] = chunk["DepartmentID"].map(dept_map)
+                chunk["DocumentTypeMongoID"] = chunk["DocumentTypeID"].map(doc_type_map)
+
+                # Filter out rows with invalid mappings
+                chunk = chunk[chunk["DepartmentMongoID"].notna() & chunk["DocumentTypeMongoID"].notna()]
+
+                # Skip rows with empty titles
+                empty_title_count = len(chunk[chunk["Title"].str.strip().str.len() == 0])
+                chunk = chunk[chunk["Title"].str.strip().str.len() > 0]
+                if empty_title_count > 0:
+                    print(f"Skipped {empty_title_count} rows with empty titles in this chunk.")
+
+                if chunk.empty:
+                    print("Skipping chunk: No valid documents after mapping and title validation.")
                     continue
-                if pd.isna(filed_date):
-                    filed_date = None
 
-                dept_mongo_id = dept_map.get(int(row["DepartmentID"]))
-                doc_type_mongo_id = doc_type_map.get(int(row["DocumentTypeID"]))
-                
-                if not dept_mongo_id or not doc_type_mongo_id:
-                    continue
+                # Prepare documents for insertion
+                documents_to_insert = [
+                    {
+                        "_id": ObjectId(),
+                        "ref_no": str(row["RefNo"]).strip(),
+                        "title": str(row["Title"]).strip(),
+                        "status": row["Status"],
+                        "created_by": str(row["CreatedBy"]).strip(),
+                        "created_date": row["CreatedDate"],
+                        "filed_by": str(row["FiledBy"]).strip() if pd.notna(row["FiledBy"]) else None,
+                        "filed_date": row["FiledDate"] if pd.notna(row["FiledDate"]) else None,
+                        "document_type_id": row["DocumentTypeMongoID"],
+                        "department_id": row["DepartmentMongoID"]
+                    }
+                    for _, row in chunk.iterrows()  # Fallback to iterrows for final transformation
+                ]
 
-                document = csvDocumentData(
-                    ref_no=str(row["RefNo"]).strip(),
-                    title=str(row["Title"]).strip(),
-                    status={1: 'Not Filed', 2: 'Filed', 3: 'Suspended'}.get(int(row["StatusID"]), 'Suspended'),
-                    created_by=str(row["CreatedBy"]).strip(),
-                    created_date=created_date,
-                    filed_by=str(row["FiledBy"]).strip() if pd.notna(row["FiledBy"]) else None,
-                    filed_date=filed_date,
-                    document_type_id=doc_type_mongo_id,
-                    department_id=dept_mongo_id
-                )
-                
-                document_dict = document.model_dump(by_alias=True, exclude_none=True)
-                document_dict["_id"] = ObjectId()
-                documents_to_insert.append(document_dict)
+                if documents_to_insert:
+                    print(f"Inserting {len(documents_to_insert)} documents in chunk...")
+                    result = await self.get_document_collection().insert_many(documents_to_insert, ordered=False)
+                    inserted_doc_ids.extend(result.inserted_ids)
+                    print(f"Inserted {len(result.inserted_ids)} documents in chunk.")
 
-            if documents_to_insert:
-                print(f"Bulk inserting {len(documents_to_insert)} documents...")
-                result = await self.get_document_collection().insert_many(documents_to_insert, ordered=False)
-                print(f"Successfully inserted {len(result.inserted_ids)} documents.")
-                
-                inserted_docs_cursor = self.get_document_collection().find(
-                    {"_id": {"$in": result.inserted_ids}}
-                )
-                documents = [self._convert_oids(doc) async for doc in inserted_docs_cursor]
-                return documents
+            print(f"Successfully processed {len(inserted_doc_ids)} documents")
+            return {"inserted_count": len(inserted_doc_ids), "status": "success"}
 
         except Exception as e:
             print(f"An error occurred during document import: {e}")
             handle_service_exception(e)
-            
-        return []
+            return []
 
     def _is_valid_row(self, row: pd.Series) -> bool:
         """Helper to validate a row from the document CSV."""

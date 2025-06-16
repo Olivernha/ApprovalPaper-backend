@@ -85,7 +85,7 @@ async def create_document(document: DocumentCreate, current_user: AuthInAdminDB 
 @router.put("/{doc_id}", status_code=status.HTTP_200_OK, response_model=DocumentResponse)
 async def update_document(
         doc_id: PyObjectId = Path(..., title="Document ID", description="The ObjectId of the document"),
-        title: Optional[str] = Form(None, min_length=1, max_length=200),
+        title: Optional[str] = Form(None, min_length=1),
         document_type_id: Optional[PyObjectId] = Form(None),
         department_id: Optional[PyObjectId] = Form(None),
         file_id: Optional[PyObjectId] = Form(None),

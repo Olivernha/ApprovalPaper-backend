@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import HTTPException, UploadFile
 
 from app.services.csvservice import CSVImportService
@@ -60,7 +62,7 @@ async def import_csv_departments(
         raise HTTPException(status_code=500, detail=f"Error processing CSV files: {str(e)}")
 
 
-@router.post("/import-csv-documents", response_model=dict)
+@router.post("/import-csv-documents", response_model=list[Any] | dict[str, int | str])
 async def import_csv_documents(
     approval_paper_file: UploadFile
 ):
@@ -80,11 +82,8 @@ async def import_csv_documents(
         documents = await service.import_documents_from_csv(approval_paper_file)
 
         # Prepare response
-        response = {
-            "documents": [doc for doc in documents]
-        }
 
-        return response
+        return documents
 
     except HTTPException as e:
         raise e

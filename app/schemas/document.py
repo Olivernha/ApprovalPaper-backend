@@ -45,7 +45,7 @@ class DocumentCreate(Document):
 class DocumentInDB(Document):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     ref_no: str = Field(..., min_length=1, description="Unique reference number")
-    title: str = Field(..., min_length=1, description="Document title")
+    title: str = Field(..., description="Document title")
     document_type_id: PyObjectId = Field(..., description="Reference to DocumentType ID")
     department_id: PyObjectId = Field(..., description="Reference to Department ID")
     created_by: str = Field(..., description="User who created the document")

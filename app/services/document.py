@@ -130,7 +130,7 @@ class DocumentService:
             padded_seq = seq_str if len(seq_str) > padding else seq_str.zfill(padding)
 
             year_suffix = str(year % 100)
-            ref_no = f"{prefix}/{year_suffix}/{padded_seq}"
+            ref_no = f"{prefix}/{padded_seq}/{year_suffix}"
 
             # Ensure ref_no is unique
             existing = await self.get_collection().find_one({"ref_no": ref_no})
@@ -195,13 +195,13 @@ class DocumentService:
 
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
-                    update_fields["filed_by"] = username or document.get("filed_by")
+                    update_fields["filed_by"] = document.get("filed_by") or full_name
                     update_fields["filed_date"] = datetime.now() or document.get("filed_date")
                 elif update_fields.get("status") == "Not Filed":
                     update_fields["filed_by"] = None
                     update_fields["filed_date"] = None
                 else:
-                    update_fields["filed_by"] = username
+                    update_fields["filed_by"] = document.get("filed_by") or full_name
             else:
                 if not isinstance(update_data, DocumentUpdateNormal):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin fields not allowed for normal users")
@@ -334,14 +334,10 @@ class DocumentService:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to delete this document")
 
             if document.get("file_id"):
-                for attempt in range(3):
-                    try:
-                        await self.gridfs_bucket.delete(to_object_id(document["file_id"]))
-                        break
-                    except Exception as e:
-                        logger.warning(f"Attempt {attempt+1} failed to delete GridFS file {document['file_id']}: {str(e)}")
-                        if attempt == 2:
-                            logger.error(f"Failed to delete GridFS file {document['file_id']} after retries")
+                try:
+                    await self.gridfs_bucket.delete(to_object_id(document["file_id"]))
+                except Exception as e:
+                    logger.warning(f"Failed to delete GridFS file {document['file_id']}: {str(e)}")
 
             result = await self.get_collection().delete_one({"_id": document_id})
             if result.deleted_count == 0:

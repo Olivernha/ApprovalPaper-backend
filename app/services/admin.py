@@ -22,6 +22,7 @@ class AdminService:
             handle_service_exception(e)
 
     async def is_admin(self, username: str) -> bool:
+       
         user = await self.get_user_by_username(username)
         return user is not None
 

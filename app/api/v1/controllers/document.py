@@ -49,6 +49,7 @@ class DocumentController:
     @staticmethod
     async def create_document(document: DocumentCreate, current_user: AuthInAdminDB) -> DocumentInDB:
         document.created_by = current_user.full_name
+        
         return await DocumentService().create_document(document)
  
     @staticmethod
@@ -56,11 +57,12 @@ class DocumentController:
         update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
         current_user_data: AuthInAdminDB
     ) -> DocumentInDB:
+        print(f"Update data: {update_data}")
         return await DocumentService().update_document(update_data, current_user_data)
 
     @staticmethod
     async def delete_document(document_id: str, current_user: AuthInAdminDB) -> dict:
-        return await DocumentService().delete_document(document_id, current_user.full_name)
+        return await DocumentService().delete_document(document_id, current_user.username)
 
     @staticmethod
     async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:
