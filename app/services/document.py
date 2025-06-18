@@ -169,7 +169,7 @@ class DocumentService:
         current_user_data: AuthInAdminDB
     ) -> DocumentInDB:
         try:
-
+           
             document_id = to_object_id(update_data.doc_id)
             username = current_user_data.username
             full_name = current_user_data.full_name
@@ -195,13 +195,13 @@ class DocumentService:
 
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
-                    update_fields["filed_by"] = document.get("filed_by") or full_name
+                    update_fields["filed_by"] = update_data.filed_by or full_name
                     update_fields["filed_date"] = datetime.now() or document.get("filed_date")
                 elif update_fields.get("status") == "Not Filed":
                     update_fields["filed_by"] = None
                     update_fields["filed_date"] = None
                 else:
-                    update_fields["filed_by"] = document.get("filed_by") or full_name
+                    update_fields["filed_by"] = update_data.filed_by or full_name
             else:
                 if not isinstance(update_data, DocumentUpdateNormal):
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin fields not allowed for normal users")
@@ -322,15 +322,17 @@ class DocumentService:
         except Exception as e:
             handle_service_exception(e)
 
-    async def delete_document(self, document_id: str, username: str) -> dict:
+    async def delete_document(self, document_id: str, user_data: AuthInAdminDB) -> dict:
         try:
             document_id = to_object_id(document_id)
+            username = user_data.username
+            full_name = user_data.full_name
             document = await self.get_collection().find_one({"_id": document_id})
             if not document:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
             is_admin = await AdminService().is_admin(username)
-            if not is_admin and not await self.is_your_document(document_id, username):
+            if not is_admin and not await self.is_your_document(document_id,full_name):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to delete this document")
 
             if document.get("file_id"):

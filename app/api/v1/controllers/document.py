@@ -62,7 +62,7 @@ class DocumentController:
 
     @staticmethod
     async def delete_document(document_id: str, current_user: AuthInAdminDB) -> dict:
-        return await DocumentService().delete_document(document_id, current_user.username)
+        return await DocumentService().delete_document(document_id, current_user)
 
     @staticmethod
     async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:

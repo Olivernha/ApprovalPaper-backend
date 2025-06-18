@@ -12,10 +12,19 @@ class DepartmentController:
         except Exception as e:
             handle_service_exception(e)
 
+
+    @staticmethod
+    async def get_active_departments() -> List[DepartmentInDB]:
+        return await DepartmentService().get_active_departments()
+        
     @staticmethod
     async def create_department(department: DepartmentCreate) -> DepartmentInDB:
         return await DepartmentService().create_department(department)
 
+    @staticmethod
+    async def update_departments_status(departments: List[str], status: int) -> List[DepartmentInDB]:
+        return await DepartmentService().update_departments_status(departments, status)
+    
     @staticmethod
     async def delete_document_type(department_id: PyObjectId, document_type_id: PyObjectId) -> None:
         await DepartmentService().delete_document_type(department_id, document_type_id)

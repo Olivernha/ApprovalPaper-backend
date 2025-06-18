@@ -5,6 +5,8 @@ from app.schemas.base import PyObjectId
 # --- Department Schemas ---
 class DepartmentBase(BaseModel):
     name: str = Field(..., min_length=1, description="Unique department name")
+    # 0 or 1 for active or inactive
+    status: int = Field(..., ge=0, le=1, description="Status of the department (0: inactive, 1: active)")
     created_date: Optional[datetime] = Field(None, description="Creation date")
     model_config = ConfigDict(
         populate_by_name=True,
@@ -80,6 +82,7 @@ class DepartmentCreate(DepartmentBase):
         json_schema_extra={
             "example": {
                 "name": "TPG",
+                "status": 1,
                 "document_types": [
                     {
                         "name": "Tender Committee",
@@ -107,6 +110,10 @@ class DepartmentInDB(DepartmentBase):
 class DepartmentResponse(DepartmentInDB):
     pass
 
+
+class DepartmentStatusUpdate(BaseModel):
+    departments: List[str]
+    status: int
 
 class csvDocumentType(BaseModel):
     inserted_id: Optional[int] = Field(None, description="Custom ID for the document type")

@@ -9,7 +9,7 @@ from app.schemas.department import DepartmentCreate, DepartmentInDB, DepartmentI
 from app.services.utils import validate_document_types
 from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
-
+import re
 class DepartmentService:
     def __init__(self, collection_name: str = "departments"):
         self.collection_name = collection_name
@@ -26,6 +26,13 @@ class DepartmentService:
         except Exception as e:
             handle_service_exception(e)
         
+    async def get_active_departments(self) -> List[DepartmentInDB]:
+        try:
+            departments = await self.get_collection().find({"status": 1}).to_list(length=None)
+            return [DepartmentInDB(**dept) for dept in departments]
+        except Exception as e:
+            handle_service_exception(e)
+
     async def create_department(self, department_data: DepartmentCreate) -> DepartmentInDB:
         try:
             existing_department = await self.get_collection().find_one({"name": department_data.name})
@@ -53,6 +60,48 @@ class DepartmentService:
             result = await self.get_collection().insert_one(department_dict)
             department_dict["_id"] = result.inserted_id
             return DepartmentInDB(**department_dict)
+        except Exception as e:
+            handle_service_exception(e)
+
+    async def update_departments_status(self, departments: List[str], new_status: int) -> List[DepartmentInDB]:
+        try:
+            if not departments:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No departments provided"
+                )
+            if not isinstance(new_status, int):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Status must be an integer"
+                )
+            if new_status not in [0, 1]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Status must be either 0 or 1"
+                )
+            
+            filter_query = {"$or": []}
+            for dept in departments:
+                if ObjectId.is_valid(dept):
+                    filter_query["$or"].append({"_id": ObjectId(dept)})
+                else:
+                    # Option 1: Case-insensitive regex search
+                    filter_query["$or"].append({
+                        "name": {"$regex": f"^{re.escape(dept)}$", "$options": "i"}
+                    })
+            
+            result = await self.get_collection().update_many(filter_query, {"$set": {"status": new_status}})
+            
+            if result.modified_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No departments found to update"
+                )
+            
+            updated_departments = await self.get_collection().find(filter_query).to_list(length=None)
+            return [DepartmentInDB(**dept) for dept in updated_departments]
+            
         except Exception as e:
             handle_service_exception(e)
 

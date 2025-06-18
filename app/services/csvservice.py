@@ -91,8 +91,10 @@ class CSVImportService:
                     continue
 
                 department_dict = {
+
                     'inserted_id': dept_id,
                     'name': dept_name,
+                    'status': 1,
                     'created_date': datetime.now(),
                     'document_types': doc_types
                 }
@@ -223,16 +225,20 @@ class CSVImportService:
                 chunk.columns = chunk.columns.str.strip()
 
                 # Get unique IDs for departments and document types
+             
                 all_dept_ids = [int(d) for d in chunk["DepartmentID"].dropna().unique() if str(d).isdigit()]
                 all_doc_type_ids = [int(d) for d in chunk["DocumentTypeID"].dropna().unique() if str(d).isdigit()]
+                
 
                 # Fetch department and document type mappings
                 dept_map = await DepartmentService().get_department_map_by_custom_ids(all_dept_ids)
                 doc_type_map = await DepartmentService().get_document_type_map_by_custom_ids(all_doc_type_ids)
-
+                
                 if not dept_map or not doc_type_map:
-                    print(f"Skipping chunk: No valid departments or document types found.")
-                    continue
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="No valid departments or document types found in the provided CSV. Please import departments or document types first."
+                    )
 
                 # Vectorized validation and data transformation
                 chunk = chunk.dropna(subset=["id", "RefNo", "Title", "StatusID", "CreatedBy", "CreatedDate",
