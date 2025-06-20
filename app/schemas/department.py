@@ -115,6 +115,18 @@ class DepartmentStatusUpdate(BaseModel):
     departments: List[str]
     status: int
 
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_encoders={PyObjectId: str, datetime: lambda dt: dt.isoformat()},
+        json_schema_extra={
+            "example": {
+                "departments": ["TPU, TPG"],
+                "status": 1
+            }
+        }
+    )
+
 class csvDocumentType(BaseModel):
     inserted_id: Optional[int] = Field(None, description="Custom ID for the document type")
     name: str = Field(..., description="Document type name")

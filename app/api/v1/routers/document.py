@@ -1,4 +1,5 @@
 
+from datetime import datetime
 from fastapi import APIRouter, Path, Query, Form, File, UploadFile, Depends, HTTPException, status
 from typing import Dict, List, Optional
 from fastapi.responses import StreamingResponse
@@ -100,6 +101,8 @@ async def update_document(
 ):
     is_admin = current_user_data.is_admin
     if is_admin:
+        created_date = datetime.fromisoformat(created_date) if created_date else None
+        filed_date = datetime.fromisoformat(filed_date) if filed_date else None
         update_data = DocumentUpdateAdmin(
             doc_id=doc_id,
             title=title,

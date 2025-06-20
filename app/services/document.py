@@ -187,7 +187,6 @@ class DocumentService:
                     update_data.file_id = PyObjectId(update_data.file_id)
                 except InvalidId:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file_id format")
-
             update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
             update_fields.pop("doc_id", None)
             # if fields are empty, remove them from update_fields
@@ -196,7 +195,7 @@ class DocumentService:
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
                     update_fields["filed_by"] = update_data.filed_by or full_name
-                    update_fields["filed_date"] = datetime.now() or document.get("filed_date")
+                    update_fields["filed_date"] = update_data.filed_date or datetime.now()
                 elif update_fields.get("status") == "Not Filed":
                     update_fields["filed_by"] = None
                     update_fields["filed_date"] = None
