@@ -5,10 +5,12 @@ from typing import Dict, List, Optional
 from fastapi.responses import StreamingResponse
 from typing import Tuple
 from motor.motor_asyncio import  AsyncIOMotorGridFSBucket
+from starlette.responses import FileResponse
 
 from app.api.v1.controllers.document import DocumentController
 from app.core.database import MongoDB
 from app.core.dependencies.auth import get_current_user_from_header
+from app.core.dependencies.document import get_document_service
 from app.schemas.admin import AuthInAdminDB
 from app.schemas.document import (
     BulkDeleteRequest,
@@ -21,8 +23,10 @@ from app.schemas.document import (
 )
 from app.schemas.base import PyObjectId
 from app.core.config import settings
-from app.core.utils import upload_file_to_gridfs
+from app.core.utils import upload_file_to_gridfs, to_object_id
 from app.core.config import settings
+from app.services.FileStorageService import FileStorageService
+from app.services.document import DocumentService
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/document",
@@ -97,7 +101,6 @@ async def update_document(
         filed_by: Optional[str] = Form(None),
         file: Optional[UploadFile] = File(None, description="File to upload"),
         current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
-        gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
 ):
     is_admin = current_user_data.is_admin
     if is_admin:
@@ -113,7 +116,6 @@ async def update_document(
             created_by=created_by,
             filed_date=filed_date,
             filed_by=filed_by,
-            file_id=file_id
         )
     else:
         update_data = DocumentUpdateNormal(
@@ -121,14 +123,9 @@ async def update_document(
             title=title,
             document_type_id=document_type_id,
             department_id=department_id,
-            file_id=file_id
         )
 
-
-    if file is not None:
-        update_data.file_id = await upload_file_to_gridfs(file, gridfs_bucket, current_user_data.username)
-
-    return await DocumentController.update_document(update_data, current_user_data)
+    return await DocumentController.update_document(update_data, current_user_data,file)
 
 @router.delete("/{document_id}", status_code=status.HTTP_200_OK)
 async def delete_document(
@@ -145,16 +142,16 @@ async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_dat
 async def bulk_update_status(bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB = Depends(get_current_user_from_header)):
     return await DocumentController.bulk_update_status(bulk_update, current_user_data)
 
-class AsyncIteratorWrapper:
-    def __init__(self, stream):
-        self.stream = stream
-
-    async def __aiter__(self):
-        while True:
-            chunk = await self.stream.read(8192)
-            if not chunk:
-                break
-            yield chunk
+# class AsyncIteratorWrapper:
+#     def __init__(self, stream):
+#         self.stream = stream
+#
+#     async def __aiter__(self):
+#         while True:
+#             chunk = await self.stream.read(8192)
+#             if not chunk:
+#                 break
+#             yield chunk
 
 # @router.get("/download/{file_id}")
 # async def download_document(
@@ -192,13 +189,30 @@ class AsyncIteratorWrapper:
 
 
 
-@router.get("/download/{document_id}")
-async def download_document(
-    document_id: str,
-    current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
-   gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
-) -> StreamingResponse:
+# @router.get("/download/{document_id}")
+# async def download_document(
+#     document_id: str,
+#     current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
+#    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
+# ) -> StreamingResponse:
+#
+#    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
+#
 
-   return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
+@router.get("/{doc_id}/file")
+async def get_document_file(
+    doc_id: str,
+    document_service: DocumentService = Depends(get_document_service)
+):
+    print('DOCUMENT', doc_id)
+    document = await document_service.get_collection().find_one({"_id": to_object_id(doc_id)})
+    print('Document', document)
+    if not document or not document.get("file_path"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
+    file_storage = FileStorageService()
+    file_path = file_storage.get_file_path(document["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found on storage")
 
+    return FileResponse(file_path)

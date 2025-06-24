@@ -18,6 +18,7 @@ env_file = env_file_map.get(env, ".env.prod")  # Fallback to prod
 
 print(f"🔧 Loading environment: {env}, file: {env_file}")
 
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Approval Paper Management API"
     VERSION: str = "1.0.0"
@@ -32,6 +33,10 @@ class Settings(BaseSettings):
     SEED_DATA_ON_STARTUP: bool = False
     CORS_ORIGINS: List[str] = ["*"]
 
+    # New storage-related settings
+    STORAGE_TYPE: str = "local"  # Options: "local" or others (e.g., "s3" for future expansion)
+    STORAGE_PATH: str = "./storage"  # Default local storage path for dev
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def split_cors(cls, v):
@@ -39,9 +44,15 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(",")]
         return v
 
+    @field_validator("STORAGE_PATH", mode="before")
+    @classmethod
+    def validate_storage_path(cls, v):
+        if not v:
+            raise ValueError("STORAGE_PATH cannot be empty")
+        return v
+
     model_config = SettingsConfigDict(
         env_file=env_file,
         env_file_encoding="utf-8"
     )
-
 settings = Settings()

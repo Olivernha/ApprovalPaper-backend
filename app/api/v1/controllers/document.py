@@ -1,10 +1,6 @@
-from typing import List, Union
-from fastapi import Depends, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
-from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+from typing import List, Union, Optional
+from fastapi import  UploadFile
 
-from app.core.dependencies.auth import get_current_user_from_header
-from app.schemas.base import PyObjectId
 from app.services.document import DocumentService
 from app.schemas.document import (
     BulkDeleteRequest,
@@ -55,10 +51,11 @@ class DocumentController:
     @staticmethod
     async def update_document(
         update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
-        current_user_data: AuthInAdminDB
+        current_user_data: AuthInAdminDB,
+        file: Optional[UploadFile] = None
     ) -> DocumentInDB:
         print(f"Update data: {update_data}")
-        return await DocumentService().update_document(update_data, current_user_data)
+        return await DocumentService().update_document(update_data, current_user_data,file)
 
     @staticmethod
     async def delete_document(document_id: str, current_user: AuthInAdminDB) -> dict:
@@ -73,12 +70,12 @@ class DocumentController:
         return await DocumentService().bulk_update_status(bulk_update, current_user_data)
     
 
-    async def download_document(
-        document_id: str,
-        current_user: AuthInAdminDB,
-        gridfs_bucket: AsyncIOMotorGridFSBucket,
-    ) -> StreamingResponse:
-        return await DocumentService().download_document(document_id, gridfs_bucket, current_user)
+    # async def download_document(
+    #     document_id: str,
+    #     current_user: AuthInAdminDB,
+    #     gridfs_bucket: AsyncIOMotorGridFSBucket,
+    # ) -> StreamingResponse:
+    #     return await DocumentService().download_document(document_id, gridfs_bucket, current_user)
 
     @staticmethod
     async def count_docs_by_status(department_id: str):

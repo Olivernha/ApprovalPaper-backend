@@ -9,7 +9,9 @@ from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 import pandas as pd
-from app.core.utils import AsyncIteratorWrapper 
+from pymongo import ReturnDocument
+
+from app.core.utils import AsyncIteratorWrapper
 from app.core.config import settings  # Import settings from the appropriate module
 
 from app.core.database import MongoDB
@@ -27,7 +29,10 @@ from app.schemas.document import (
 )
 from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
+from app.services.FileStorageService import FileStorageService
 from app.services.admin import AdminService
+
+from fastapi import UploadFile
 import logging
 
 from app.services.department import DepartmentService
@@ -38,8 +43,12 @@ logger = logging.getLogger(__name__)
 class DocumentService:
     def __init__(self, collection_name: str = DocumentModel.COLLECTION_NAME):
         self.collection_name = collection_name
-        self.gridfs_bucket = AsyncIOMotorGridFSBucket(MongoDB.get_database())
 
+        db = MongoDB.get_database()
+        if db is None:
+            raise HTTPException(status_code=500, detail="Database connection not established")
+
+        self.gridfs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name=settings.GRIDFS_BUCKET_NAME)
     def get_collection(self):
         collection = MongoDB.get_database()[self.collection_name]
         return collection
@@ -162,14 +171,13 @@ class DocumentService:
         except Exception as e:
             handle_service_exception(e)
 
-
     async def update_document(
-        self,
-        update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
-        current_user_data: AuthInAdminDB
+            self,
+            update_data: Union[DocumentUpdateNormal, DocumentUpdateAdmin],
+            current_user_data: AuthInAdminDB,
+            file: Optional[UploadFile] = None
     ) -> DocumentInDB:
         try:
-           
             document_id = to_object_id(update_data.doc_id)
             username = current_user_data.username
             full_name = current_user_data.full_name
@@ -180,17 +188,37 @@ class DocumentService:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
             if not is_admin and not await self.is_your_document(document_id, full_name):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to update this document")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="You are not allowed to update this document")
 
-            if update_data.file_id is not None:
-                try:
-                    update_data.file_id = PyObjectId(update_data.file_id)
-                except InvalidId:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file_id format")
+            file_storage = FileStorageService()
             update_fields = update_data.model_dump(exclude_unset=True, exclude_none=True)
             update_fields.pop("doc_id", None)
-            # if fields are empty, remove them from update_fields
             update_fields = {k: v for k, v in update_fields.items() if v is not None}
+
+            # Handle file upload
+            if file:
+                # Use existing or updated department_id
+                department_id = update_fields.get("department_id", document["department_id"])
+                # Fetch department name
+                department = await MongoDB.get_database()["departments"].find_one({"_id": to_object_id(department_id)})
+                if not department:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department not found")
+                department_name = department.get("name", "Unknown")
+
+                # Get ref_no and created_date
+                ref_no = document["ref_no"]
+                created_date = document["created_date"].isoformat() if isinstance(document["created_date"],
+                                                                                  datetime) else document[
+                    "created_date"]
+
+                # Save new file and get relative path
+                relative_path = await file_storage.save_file(file, department_name, ref_no, created_date)
+                update_fields["file_path"] = relative_path
+
+                # Delete old file if exists
+                if document.get("file_path"):
+                    await file_storage.delete_file(document["file_path"])
 
             if is_admin and isinstance(update_data, DocumentUpdateAdmin):
                 if update_fields.get("status") == "Filed":
@@ -203,21 +231,12 @@ class DocumentService:
                     update_fields["filed_by"] = update_data.filed_by or full_name
             else:
                 if not isinstance(update_data, DocumentUpdateNormal):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin fields not allowed for normal users")
-                allowed_fields = {"title", "document_type_id", "department_id", "file_id"}
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                        detail="Admin fields not allowed for normal users")
+                allowed_fields = {"title", "document_type_id", "department_id", "file_path"}
                 if any(field not in allowed_fields for field in update_fields):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Normal users can only update title, document_type_id, department_id, and file_id")
-
-            if "file_id" in update_fields and update_fields["file_id"] != document.get("file_id"):
-                if document.get("file_id"):
-                    for attempt in range(3):
-                        try:
-                            await self.gridfs_bucket.delete(to_object_id(document["file_id"]))
-                            break
-                        except Exception as e:
-                            logger.warning(f"Attempt {attempt+1} failed to delete GridFS file {document['file_id']}: {str(e)}")
-                            if attempt == 2:
-                                logger.error(f"Failed to delete GridFS file {document['file_id']} after retries")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                        detail="Normal users can only update title, document_type_id, department_id, and file_path")
 
             if "document_type_id" in update_fields or "department_id" in update_fields:
                 dept_id = to_object_id(update_fields.get("department_id", document["department_id"]))
@@ -227,7 +246,8 @@ class DocumentService:
                     "document_types._id": doc_type_id
                 })
                 if not dept_check:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid department_id or document_type_id")
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                        detail="Invalid department_id or document_type_id")
 
             if "document_type_id" in update_fields:
                 update_fields["document_type_id"] = to_object_id(update_fields["document_type_id"])
@@ -237,7 +257,7 @@ class DocumentService:
             updated_document = await self.get_collection().find_one_and_update(
                 {"_id": document_id},
                 {"$set": update_fields},
-                return_document=True
+                return_document=ReturnDocument.AFTER
             )
 
             if not updated_document:
@@ -326,20 +346,29 @@ class DocumentService:
             document_id = to_object_id(document_id)
             username = user_data.username
             full_name = user_data.full_name
+            is_admin = user_data.is_admin  # Use is_admin from AuthInAdminDB directly
+
+            # Fetch the document
             document = await self.get_collection().find_one({"_id": document_id})
             if not document:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-            is_admin = await AdminService().is_admin(username)
-            if not is_admin and not await self.is_your_document(document_id,full_name):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to delete this document")
+            # Check permissions
+            if not is_admin and not await self.is_your_document(document_id, full_name):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="You are not allowed to delete this document")
 
-            if document.get("file_id"):
+            # Delete associated file if it exists
+
+            if document.get("file_path"):
+                file_storage = FileStorageService()
                 try:
-                    await self.gridfs_bucket.delete(to_object_id(document["file_id"]))
+                    await file_storage.delete_file(document["file_path"])
                 except Exception as e:
-                    logger.warning(f"Failed to delete GridFS file {document['file_id']}: {str(e)}")
+                    logger.warning(f"Failed to delete file {document['file_path']}: {str(e)}")
+                    # Continue with document deletion even if file deletion fails
 
+            # Delete the document from MongoDB
             result = await self.get_collection().delete_one({"_id": document_id})
             if result.deleted_count == 0:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to delete document")
@@ -350,33 +379,41 @@ class DocumentService:
 
     async def bulk_delete_documents(self, bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:
         try:
+            # Restrict to admins only
             if not current_user_data.is_admin:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can perform bulk delete operations")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="Only admins can perform bulk delete operations")
 
+            # Convert document IDs to ObjectId
             document_ids = [to_object_id(doc_id) for doc_id in bulk_delete.document_ids]
-            documents = await self.get_collection().find({"_id": {"$in": document_ids}}).to_list(length=len(document_ids))
+
+            # Fetch documents to verify existence and get file paths
+            documents = await self.get_collection().find({"_id": {"$in": document_ids}}).to_list(
+                length=len(document_ids))
             if len(documents) != len(document_ids):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more documents not found")
 
+            # Delete associated files
+            file_storage = FileStorageService()
             for doc in documents:
-                if doc.get("file_id"):
-                    for attempt in range(3):
-                        try:
-                            await self.gridfs_bucket.delete(to_object_id(doc["file_id"]))
-                            break
-                        except Exception as e:
-                            logger.warning(f"Attempt {attempt+1} failed to delete GridFS file {doc['file_id']}: {str(e)}")
-                            if attempt == 2:
-                                logger.error(f"Failed to delete GridFS file {doc['file_id']} after retries")
+                if doc.get("file_path"):
+                    try:
+                        await file_storage.delete_file(doc["file_path"])
+                    except Exception as e:
+                        logger.warning(f"Failed to delete file {doc['file_path']}: {str(e)}")
+                        # Continue with document deletion even if file deletion fails
 
+            # Perform bulk delete in MongoDB
             result = await self.get_collection().delete_many({"_id": {"$in": document_ids}})
+            if result.deleted_count != len(document_ids):
+                logger.warning(f"Expected to delete {len(document_ids)} documents, but deleted {result.deleted_count}")
+
             return {
                 "message": f"Successfully deleted {result.deleted_count} documents",
                 "deleted_count": result.deleted_count
             }
         except Exception as e:
             handle_service_exception(e)
-
     async def bulk_update_status(self, bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB) -> dict:
         try:
             if not current_user_data.is_admin:
@@ -494,48 +531,48 @@ class DocumentService:
         except Exception as e:
             handle_service_exception(e)
 
-    async def download_document(self, document_id: str,  gridfs_bucket: AsyncIOMotorGridFSBucket ,current_user: AuthInAdminDB):
-        try:
-            document = await self.get_document_by_id(document_id)
-            if not document:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-            if not document.file_id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file associated with this document")
-
-            is_admin = current_user.is_admin
-            if not is_admin and not await self.is_your_document(document_id, current_user.full_name):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to download this document")
-
-            file_id = to_object_id(document.file_id)
-            files_collection_name = f"{settings.GRIDFS_BUCKET_NAME}.files"
-            file_info = await self.get_file_collection(files_collection_name).find_one({"_id": file_id})
-            if not file_info:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in GridFS")
-
-            gridfs_file = await gridfs_bucket.open_download_stream(file_id)
-
-            content_type = (
-                gridfs_file.metadata.get("content_type", "application/octet-stream")
-                if gridfs_file.metadata else "application/octet-stream"
-            )
-            filename = gridfs_file.filename or "document"
-            extension = mimetypes.guess_extension(content_type) or ""
-            if extension and not filename.lower().endswith(extension.lower()):
-                filename += extension
-
-            filename = filename.replace("\n", "").replace("\r", "").replace(";", "")
-
-            return StreamingResponse(
-                AsyncIteratorWrapper(gridfs_file),
-                media_type=content_type,
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
-                    "Content-Length": str(gridfs_file.length)
-                }
-            )
-        except Exception as e:
-            handle_service_exception(e)
-
+    # async def download_document(self, document_id: str,  gridfs_bucket: AsyncIOMotorGridFSBucket ,current_user: AuthInAdminDB):
+    #     try:
+    #         document = await self.get_document_by_id(document_id)
+    #         if not document:
+    #             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    #         if not document.file_id:
+    #             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file associated with this document")
+    #
+    #         is_admin = current_user.is_admin
+    #         if not is_admin and not await self.is_your_document(document_id, current_user.full_name):
+    #             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to download this document")
+    #
+    #         file_id = to_object_id(document.file_id)
+    #         files_collection_name = f"{settings.GRIDFS_BUCKET_NAME}.files"
+    #         file_info = await self.get_file_collection(files_collection_name).find_one({"_id": file_id})
+    #         if not file_info:
+    #             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in GridFS")
+    #
+    #         gridfs_file = await gridfs_bucket.open_download_stream(file_id)
+    #
+    #         content_type = (
+    #             gridfs_file.metadata.get("content_type", "application/octet-stream")
+    #             if gridfs_file.metadata else "application/octet-stream"
+    #         )
+    #         filename = gridfs_file.filename or "document"
+    #         extension = mimetypes.guess_extension(content_type) or ""
+    #         if extension and not filename.lower().endswith(extension.lower()):
+    #             filename += extension
+    #
+    #         filename = filename.replace("\n", "").replace("\r", "").replace(";", "")
+    #
+    #         return StreamingResponse(
+    #             AsyncIteratorWrapper(gridfs_file),
+    #             media_type=content_type,
+    #             headers={
+    #                 "Content-Disposition": f'attachment; filename="{filename}"',
+    #                 "Content-Length": str(gridfs_file.length)
+    #             }
+    #         )
+    #     except Exception as e:
+    #         handle_service_exception(e)
+    #
 
     async def count_docs_by_status(self, department_id: str) -> Dict[str, int]:
         try:

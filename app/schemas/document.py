@@ -53,7 +53,8 @@ class DocumentInDB(Document):
     filed_by: Optional[str] = Field(None, description="User who filed the document")
     filed_date: Optional[datetime] = Field(None, description="Filing timestamp")
     status: str = Field(default="Not Filed", description="Document status", pattern="^(Not Filed|Filed|Suspended)$")
-    file_id: Optional[PyObjectId] = None
+
+    file_path: Optional[str] = Field(None, description="Relative path to the stored file")
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -66,7 +67,7 @@ class DocumentUpdateNormal(BaseModel):
     title: Optional[str] = Form(None, min_length=1, description="Document title")
     department_id: Optional[PyObjectId] = Form(None, description="Reference to Department ID")
     document_type_id: Optional[PyObjectId] = Form(None, description="Reference to DocumentType ID")
-    file_id: Optional[PyObjectId] = Form(None, description="GridFS file ID for the uploaded document")
+    file_path: Optional[str] = Field(None, description="Relative path to the stored file")
 
     model_config = ConfigDict(
         json_schema_extra={
