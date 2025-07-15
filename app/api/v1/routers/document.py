@@ -2,8 +2,7 @@
 from datetime import datetime
 from fastapi import APIRouter, Path, Query, Form, File, UploadFile, Depends, HTTPException, status
 from typing import Dict, List, Optional
-from fastapi.responses import StreamingResponse
-from typing import Tuple
+
 from motor.motor_asyncio import  AsyncIOMotorGridFSBucket
 from starlette.responses import FileResponse
 
@@ -22,8 +21,8 @@ from app.schemas.document import (
     DocumentUpdateAdmin,
 )
 from app.schemas.base import PyObjectId
-from app.core.config import settings
-from app.core.utils import upload_file_to_gridfs, to_object_id
+
+from app.core.utils import  to_object_id
 from app.core.config import settings
 from app.services.FileStorageService import FileStorageService
 from app.services.document import DocumentService
@@ -47,6 +46,14 @@ async def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
 @router.get("/", response_model=List[DocumentResponse])
 async def get_documents():
     return await DocumentController.get_documents()
+
+
+@router.get('/search')
+async def search_documents(
+        search: Optional[str] = Query(None, description="Search query for title, ref_no, or created_by"),
+):
+    return await DocumentController.get_documents_search(search)
+
 
 @router.get("/paginated", response_model=DocumentPaginationResponse)
 async def get_documents_paginated(
@@ -141,63 +148,6 @@ async def bulk_delete_documents(bulk_delete: BulkDeleteRequest, current_user_dat
 @router.post("/bulk-update-status", status_code=status.HTTP_200_OK)
 async def bulk_update_status(bulk_update: BulkUpdateStatusRequest, current_user_data: AuthInAdminDB = Depends(get_current_user_from_header)):
     return await DocumentController.bulk_update_status(bulk_update, current_user_data)
-
-# class AsyncIteratorWrapper:
-#     def __init__(self, stream):
-#         self.stream = stream
-#
-#     async def __aiter__(self):
-#         while True:
-#             chunk = await self.stream.read(8192)
-#             if not chunk:
-#                 break
-#             yield chunk
-
-# @router.get("/download/{file_id}")
-# async def download_document(
-#     file_id: str,
-#     gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
-# ) -> StreamingResponse:
-#     """Download a document from GridFS by file_id"""
-#     try:
-#         # Validate ObjectId
-#         file_obj_id = PyObjectId(file_id)
-
-#         # Attempt to get the GridFS file
-#         gridfs_file = await gridfs_bucket.open_download_stream(file_obj_id)
-
-#         # Get metadata and filename
-#         content_type = gridfs_file.metadata.get("content_type", "application/octet-stream")
-#         filename = gridfs_file.filename or "document"
-
-#         # Ensure correct extension
-#         extension = mimetypes.guess_extension(content_type) or ""
-#         if extension and not filename.endswith(extension):
-#             filename += extension
-
-#         return StreamingResponse(
-#             AsyncIteratorWrapper(gridfs_file),
-#             media_type=content_type,
-#             headers={
-#                 "Content-Disposition": f'attachment; filename="{filename}"'
-#             }
-#         )
-#     except HTTPException as http_exc:
-#         raise http_exc
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
-
-
-
-# @router.get("/download/{document_id}")
-# async def download_document(
-#     document_id: str,
-#     current_user_data: AuthInAdminDB = Depends(get_current_user_from_header),
-#    gridfs_bucket: AsyncIOMotorGridFSBucket = Depends(get_gridfs_bucket)
-# ) -> StreamingResponse:
-#
-#    return await DocumentController.download_document(document_id, current_user_data, gridfs_bucket)
-#
 
 @router.get("/{doc_id}/file")
 async def get_document_file(

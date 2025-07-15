@@ -40,7 +40,9 @@ class DocumentController:
         return await DocumentService().get_documents_paginated(
             page, limit, search, status_filter, department_id, document_type_id, sort_field, sort_order
         )
-
+    @staticmethod
+    async def get_documents_search(query):
+        return await DocumentService().get_documents_search(query)
     
     @staticmethod
     async def create_document(document: DocumentCreate, current_user: AuthInAdminDB) -> DocumentInDB:

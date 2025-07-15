@@ -91,7 +91,6 @@ class CSVImportService:
                     continue
 
                 department_dict = {
-
                     'inserted_id': dept_id,
                     'name': dept_name,
                     'status': 1,

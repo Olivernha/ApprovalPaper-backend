@@ -62,6 +62,11 @@ class DocumentInDB(Document):
         json_encoders={PyObjectId: str, datetime: lambda dt: dt.isoformat()}
     )
 
+class DocumentSearch(DocumentInDB):
+    department_name: Optional[str] = Field(None, description="Name of the department")
+    document_type_name: Optional[str] = Field(None, description="Name of the document type")
+
+
 class DocumentUpdateNormal(BaseModel):
     doc_id: PyObjectId = Form(..., description="Document ID to update")
     title: Optional[str] = Form(None, min_length=1, description="Document title")

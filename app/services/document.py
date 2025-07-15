@@ -1,17 +1,14 @@
-from datetime import datetime
-import io
-import mimetypes
+from datetime import datetime, timedelta
+
 from typing import List, Union, Dict, Any, Optional
 
-from bson.errors import InvalidId
-from fastapi import Depends, HTTPException, UploadFile, status
-from fastapi.responses import StreamingResponse
+
+from fastapi import  HTTPException, UploadFile, status
+
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
-import pandas as pd
 from pymongo import ReturnDocument
 
-from app.core.utils import AsyncIteratorWrapper
 from app.core.config import settings  # Import settings from the appropriate module
 
 from app.core.database import MongoDB
@@ -25,12 +22,11 @@ from app.schemas.document import (
     DocumentInDB,
     DocumentUpdateNormal,
     DocumentUpdateAdmin,
-    DocumentPaginationResponse, csvDocumentData,
+    DocumentPaginationResponse, DocumentSearch
 )
 from app.core.utils import to_object_id
 from app.core.exceptions import handle_service_exception
 from app.services.FileStorageService import FileStorageService
-from app.services.admin import AdminService
 
 from fastapi import UploadFile
 import logging
@@ -291,16 +287,43 @@ class DocumentService:
             query_filter: Dict[str, Any] = {}
 
             if search:
-                query_filter["$or"] = [
+                or_filters = [
                     {"title": {"$regex": search, "$options": "i"}},
                     {"ref_no": {"$regex": search, "$options": "i"}},
                     {"created_by": {"$regex": search, "$options": "i"}}
                 ]
 
+                # Try to interpret search as a date in DD/MM/YYYY format
+                try:
+                    search_date = datetime.strptime(search, "%d/%m/%Y")
+                    next_day = search_date + timedelta(days=1)
+
+                    # Add created_date range filter to match the specific date
+                    or_filters.append({
+                        "created_date": {
+                            "$gte": search_date,
+                            "$lt": next_day
+                        }
+                    })
+                    or_filters.append({
+                        "filed_date": {
+                            "$gte": search_date,
+                            "$lt": next_day
+                        }
+                    })
+                except ValueError:
+                    # Ignore if not a valid date format
+                    pass
+
+                query_filter["$or"] = or_filters
+
             if status_filter:
                 valid_statuses = {"Not Filed", "Filed", "Suspended"}
                 if status_filter not in valid_statuses:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status. Must be one of {valid_statuses}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid status. Must be one of {valid_statuses}"
+                    )
                 query_filter["status"] = status_filter
 
             if department_id:
@@ -314,10 +337,16 @@ class DocumentService:
                 "created_by", "filed_date", "filed_by"
             }
             if sort_field not in valid_sort_fields:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid sort field. Must be one of {valid_sort_fields}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid sort field. Must be one of {valid_sort_fields}"
+                )
 
             if sort_order not in {1, -1}:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sort order must be 1 (ascending) or -1 (descending)")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Sort order must be 1 (ascending) or -1 (descending)"
+                )
 
             total_documents = await self.get_collection().count_documents(query_filter)
             total_pages = (total_documents + limit - 1) // limit if total_documents > 0 else 1
@@ -340,7 +369,6 @@ class DocumentService:
             )
         except Exception as e:
             handle_service_exception(e)
-
     async def delete_document(self, document_id: str, user_data: AuthInAdminDB) -> dict:
         try:
             document_id = to_object_id(document_id)
@@ -359,7 +387,6 @@ class DocumentService:
                                     detail="You are not allowed to delete this document")
 
             # Delete associated file if it exists
-
             if document.get("file_path"):
                 file_storage = FileStorageService()
                 try:
@@ -367,6 +394,33 @@ class DocumentService:
                 except Exception as e:
                     logger.warning(f"Failed to delete file {document['file_path']}: {str(e)}")
                     # Continue with document deletion even if file deletion fails
+
+            # Decrement the department document type counter
+            try:
+                created_date = document.get("created_date")
+                if created_date:
+                    year = created_date.year if isinstance(created_date, datetime) else datetime.now().year
+                    year_key = str(year)
+                    
+                    department_id = document.get("department_id")
+                    document_type_id = document.get("document_type_id")
+                    
+                    if department_id and document_type_id:
+                        await DepartmentService().get_collection().update_one(
+                            {
+                                "_id": department_id,
+                                "document_types._id": document_type_id
+                            },
+                            {
+                                "$inc": {
+                                    f"document_types.$.counters.{year_key}": -1
+                                }
+                            }
+                        )
+                        logger.info(f"Decremented counter for department {department_id}, document type {document_type_id}, year {year}")
+            except Exception as e:
+                logger.warning(f"Failed to decrement department counter: {str(e)}")
+                # Continue with document deletion even if counter decrement fails
 
             # Delete the document from MongoDB
             result = await self.get_collection().delete_one({"_id": document_id})
@@ -376,6 +430,7 @@ class DocumentService:
             return {"message": "Document deleted successfully"}
         except Exception as e:
             handle_service_exception(e)
+    
 
     async def bulk_delete_documents(self, bulk_delete: BulkDeleteRequest, current_user_data: AuthInAdminDB) -> dict:
         try:
@@ -573,6 +628,66 @@ class DocumentService:
     #     except Exception as e:
     #         handle_service_exception(e)
     #
+    async def get_documents_search(self,query):
+        # search all across department and including department name and document_type_name
+        try:
+            pipeline = [
+            {
+                "$lookup": {
+                "from": "departments",
+                "localField": "department_id",
+                "foreignField": "_id",
+                "as": "department"
+                }
+            },
+            {
+                "$unwind": "$department"
+            },
+            {
+                "$unwind": "$department.document_types"
+            },
+            {
+                "$match": {
+                "$expr": {
+                    "$eq": ["$document_type_id", "$department.document_types._id"]
+                }
+                }
+            },
+            {
+                "$match": {
+                "$or": [
+                    {"title": {"$regex": query, "$options": "i"}},
+                    {"ref_no": {"$regex": query, "$options": "i"}},
+                    {"created_by": {"$regex": query, "$options": "i"}},
+                    {"department.name": {"$regex": query, "$options": "i"}},
+                    {"department.document_types.name": {"$regex": query, "$options": "i"}}
+                ]
+                }
+            },
+            {
+                "$project": {
+                "_id": 1,
+                "title": 1,
+                "ref_no": 1,
+                "created_by": 1,
+                "created_date": 1,
+                "status": 1,
+                "filed_by": 1,
+                "filed_date": 1,
+                "department_id": 1,
+                "document_type_id": 1,
+                "file_path": 1,
+                "department_name": "$department.name",
+                "document_type_name": "$department.document_types.name"
+                }
+            }
+            ]
+            
+            results = await self.get_collection().aggregate(pipeline).to_list(length=None)
+            print(results)
+            return [DocumentSearch(**doc) for doc in results]
+        except Exception as e:
+            handle_service_exception(e)
 
     async def count_docs_by_status(self, department_id: str) -> Dict[str, int]:
         try:
