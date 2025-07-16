@@ -84,7 +84,6 @@ class DocumentUpdateNormal(BaseModel):
             }
         }
     )
-
 class DocumentUpdateAdmin(DocumentUpdateNormal):
     doc_id: PyObjectId = Field(..., description="Document ID to update")
     created_date: Optional[datetime] = Form(None, description="Creation date of the document")

@@ -12,7 +12,6 @@ class DepartmentController:
         except Exception as e:
             handle_service_exception(e)
 
-
     @staticmethod
     async def get_active_departments() -> List[DepartmentInDB]:
         return await DepartmentService().get_active_departments()

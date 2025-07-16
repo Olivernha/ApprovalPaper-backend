@@ -78,10 +78,7 @@ async def import_csv_documents(
     try:
         service = CSVImportService()
 
-        # Process approval paper CSV
         documents = await service.import_documents_from_csv(approval_paper_file)
-
-        # Prepare response
 
         return documents
 
