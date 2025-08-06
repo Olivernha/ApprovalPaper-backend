@@ -5,6 +5,7 @@ from app.schemas.base import PyObjectId
 # --- Department Schemas ---
 class DepartmentBase(BaseModel):
     name: str = Field(..., min_length=1, description="Unique department name")
+    full_name: Optional[str | None] = Field(None, description="Full name of the department")
     # 0 or 1 for active or inactive
     status: int = Field(..., ge=0, le=1, description="Status of the department (0: inactive, 1: active)")
     created_date: Optional[datetime] = Field(None, description="Creation date")

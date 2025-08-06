@@ -28,8 +28,9 @@ class DepartmentService:
         
     async def get_active_departments(self) -> List[DepartmentInDB]:
         try:
-            departments = await self.get_collection().find({"status": 1}).to_list(length=None)
-            return [DepartmentInDB(**dept) for dept in departments]
+           departments = await self.get_collection().find({"status": 1}).sort("priority", 1).to_list(length=None)
+           
+           return [DepartmentInDB(**dept) for dept in departments]
         except Exception as e:
             handle_service_exception(e)
 

@@ -51,8 +51,9 @@ async def get_documents():
 @router.get('/search')
 async def search_documents(
         search: Optional[str] = Query(None, description="Search query for title, ref_no, or created_by"),
+        status: Optional[str] = Query(None, description="Filter by document status (Not Filed, Filed, Suspended)"),
 ):
-    return await DocumentController.get_documents_search(search)
+    return await DocumentController.get_documents_search(search,status_filter=status)
 
 
 @router.get("/paginated", response_model=DocumentPaginationResponse)

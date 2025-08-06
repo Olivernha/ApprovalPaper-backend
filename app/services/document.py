@@ -628,64 +628,78 @@ class DocumentService:
     #     except Exception as e:
     #         handle_service_exception(e)
     #
-    async def get_documents_search(self,query):
-        # search all across department and including department name and document_type_name
+    async def get_documents_search(self, query, status_filter):
+       
+    # Mapping from frontend filter to DB status string
+        status_mapping = {
+            "Unfiled": "Not Filed",
+            "Filed": "Filed",
+            "Suspended": "Suspended"
+        }
         try:
-            pipeline = [
-            {
-                "$lookup": {
-                "from": "departments",
-                "localField": "department_id",
-                "foreignField": "_id",
-                "as": "department"
+            # Prepare the status value for filtering if given
+            db_status = status_mapping.get(status_filter) if status_filter else None
+
+            # Build the $and conditions list dynamically
+            and_conditions = [
+                {
+                    "$or": [
+                        {"title": {"$regex": query, "$options": "i"}},
+                        {"ref_no": {"$regex": query, "$options": "i"}},
+                        {"created_by": {"$regex": query, "$options": "i"}},
+                        {"department.name": {"$regex": query, "$options": "i"}},
+                        {"department.document_types.name": {"$regex": query, "$options": "i"}}
+                    ]
                 }
-            },
-            {
-                "$unwind": "$department"
-            },
-            {
-                "$unwind": "$department.document_types"
-            },
-            {
-                "$match": {
-                "$expr": {
-                    "$eq": ["$document_type_id", "$department.document_types._id"]
-                }
-                }
-            },
-            {
-                "$match": {
-                "$or": [
-                    {"title": {"$regex": query, "$options": "i"}},
-                    {"ref_no": {"$regex": query, "$options": "i"}},
-                    {"created_by": {"$regex": query, "$options": "i"}},
-                    {"department.name": {"$regex": query, "$options": "i"}},
-                    {"department.document_types.name": {"$regex": query, "$options": "i"}}
-                ]
-                }
-            },
-            {
-                "$project": {
-                "_id": 1,
-                "title": 1,
-                "ref_no": 1,
-                "created_by": 1,
-                "created_date": 1,
-                "status": 1,
-                "filed_by": 1,
-                "filed_date": 1,
-                "department_id": 1,
-                "document_type_id": 1,
-                "file_path": 1,
-                "department_name": "$department.name",
-                "document_type_name": "$department.document_types.name"
-                }
-            }
             ]
-            
+            if db_status:
+                and_conditions.append({"status": db_status})
+
+            pipeline = [
+                {
+                    "$lookup": {
+                        "from": "departments",
+                        "localField": "department_id",
+                        "foreignField": "_id",
+                        "as": "department"
+                    }
+                },
+                {"$unwind": "$department"},
+                {"$unwind": "$department.document_types"},
+                {
+                    "$match": {
+                        "$expr": {
+                            "$eq": ["$document_type_id", "$department.document_types._id"]
+                        }
+                    }
+                },
+                {
+                    "$match": {
+                        "$and": and_conditions
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 1,
+                        "title": 1,
+                        "ref_no": 1,
+                        "created_by": 1,
+                        "created_date": 1,
+                        "status": 1,
+                        "filed_by": 1,
+                        "filed_date": 1,
+                        "department_id": 1,
+                        "document_type_id": 1,
+                        "file_path": 1,
+                        "department_name": "$department.name",
+                        "document_type_name": "$department.document_types.name"
+                    }
+                }
+            ]
+
             results = await self.get_collection().aggregate(pipeline).to_list(length=None)
-            print(results)
             return [DocumentSearch(**doc) for doc in results]
+
         except Exception as e:
             handle_service_exception(e)
 
